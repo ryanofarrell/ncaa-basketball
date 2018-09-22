@@ -481,7 +481,7 @@ def mlmodel(mldf):
     train_features, test_features, train_results, test_results = train_test_split(mldf, results, test_size = 0.25, random_state = 42)
     
     # Set up and train ML model
-    rf = RandomForestRegressor(n_estimators = 1000)
+    rf = RandomForestRegressor(n_estimators = 10)
     rf.fit(train_features, train_results)
     
     # use model test data to predict outcomes
