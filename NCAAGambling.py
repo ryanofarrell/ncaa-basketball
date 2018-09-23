@@ -539,7 +539,8 @@ def mlmodel(mldf):
         print('Create MLDF Time: ' + str(round((mlmodeltime)/60,2)) + ' min')
     
 
-    return feature_importances, confidence_results
+    return feature_importances
+    #, confidence_results
 
 ###############################################################################
 ###############################################################################
