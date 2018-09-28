@@ -22,6 +22,7 @@ begin = time.time()
 rsgc = pd.read_csv('/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle-update/RegularSeasonCompactResults.csv')
 rsgd = pd.read_csv('/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle-update/RegularSeasonDetailedResults.csv')
 
+rsgd['DayZero'] = pd.to_datetime(rsgd['DayZero'],format='%m/%d/%Y')
 
 
 
