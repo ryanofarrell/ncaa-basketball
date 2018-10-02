@@ -114,7 +114,7 @@ rsg['TmFGA2'] = rsg['TmFGA'] - rsg['TmFGA3']
 rsg['OppFGM2'] = rsg['OppFGM'] - rsg['OppFGM3']
 rsg['OppFGA2'] = rsg['OppFGA'] - rsg['OppFGA3']
 
-# Get field goal percentages
+# Calculate field goal percentages in each game
 rsg['TmFGPct'] = rsg['TmFGM'] / rsg['TmFGA']
 rsg['TmFG3Pct'] = rsg['TmFGM3'] / rsg['TmFGA3']
 rsg['TmFG2Pct'] = rsg['TmFGM2'] / rsg['TmFGA2']
@@ -135,15 +135,110 @@ rsg['OppMargin'] = -rsg['TmMargin']
 # cont...Ast (assists); OR (offensive rebounds); DR (devensive rebounds); TR (total rebounds)
 # cont...FTA (free throws attempted); FTM (free throws made); FTPct (Free throw percent)
 # cont...TO (turn overs); Stl (steals); Blk (blocks); Foul (foul)
-metrics = ['PF','Margin','FGM','FGA','FGPct',
-            'FGM3','FGA3','FG3Pct','FGM2','FGA2','FG2Pct','Ast','OR','DR','TR',
-            'FTA','FTM','FTPct','TO','Stl','Blk','Foul']
+metrics = ['PF','Margin','FGM','FGA',
+            'FGM3','FGA3','FGM2','FGA2','Ast','OR','DR','TR',
+            'FTA','FTM','TO','Stl','Blk','Foul']
 
-# Add in per-40 stats to rsg
+# Getting in game per-40 for latter opponent adjusting
 for x in {'Opp','Tm'}:
     for column in metrics:
         rsg[x + column + 'per40'] = rsg[x + column] / rsg['GameMins'] * 40
 del column, x
+
+# Create summable fields
+summables = ['GameMins','TmWin','TmGame']
+for x in {'Opp','Tm'}:
+    for column in metrics:
+        summables.append(x + column)
+del column, x
+
+# Create seasonteams dataframe, getting in season stats
+seasonteams = rsg.groupby(['TmID','TmName','Season'])[summables].sum().reset_index()
+
+
+# Per-40 adjust the season stats, for later compare to in-game stats
+for x in {'Opp','Tm'}:
+    for column in metrics:
+        seasonteams[x + column + 'per40'] = seasonteams[x + column] / seasonteams['GameMins'] * 40
+del column, x
+
+# Calculate season-long percentages
+seasonteams['TmFGPct'] = seasonteams['TmFGM'] / seasonteams['TmFGA']
+seasonteams['TmFG3Pct'] = seasonteams['TmFGM3'] / seasonteams['TmFGA3']
+seasonteams['TmFG2Pct'] = seasonteams['TmFGM2'] / seasonteams['TmFGA2']
+seasonteams['TmFTPct'] = seasonteams['TmFTM'] / seasonteams['TmFTA']
+seasonteams['OppFGPct'] = seasonteams['OppFGM'] / seasonteams['OppFGA']
+seasonteams['OppFG3Pct'] = seasonteams['OppFGM3'] / seasonteams['OppFGA3']
+seasonteams['OppFG2Pct'] = seasonteams['OppFGM2'] / seasonteams['OppFGA2']
+seasonteams['OppFTPct'] = seasonteams['OppFTM'] / seasonteams['OppFTA']
+
+# Double Check for columns showing up in both
+#rsg_cols = pd.DataFrame(list(rsg)).reset_index()
+#seasonteams_cols = pd.DataFrame(list(seasonteams)).reset_index()
+#col_diffs = pd.merge(rsg_cols, seasonteams_cols, on=[0],how='outer')
+
+###############################################################################
+###############################################################################
+# Define opponentadjust UDF (for ease of opponent-adjusting metrics)
+###############################################################################
+###############################################################################
+def opponentadjust(OAmetric):
+    global rsg, seasonteams
+    
+    # Figure out the prefix, core metric, for use later
+    if OAmetric[:2] == 'Tm':
+        prefix = OAmetric[:2]
+        otherprefix = 'Opp'
+        coremetric = OAmetric[2:]    
+    if OAmetric[:3] == 'Opp':
+        prefix = OAmetric[:3]
+        otherprefix = 'Tm'
+        coremetric = OAmetric[3:]
+    # print (coremetric + prefix)
+    
+    # From iteams put average PF into opponent side of irsg
+    # Example, Opp_AvgPF_Against, Opp_AvgPA_Against
+    # If I am OAing TmPFper40 (my offense proficiency), I want to get OppPFper40 for my opponent
+    # So, for a TmName, get their OppPFper40, aka their PAper40
+    tempseasonteams = seasonteams[['TmName','Season',otherprefix+coremetric]]
+    
+    # Rename my opponent's metric to say it's *their* average <insert metric>
+    # Rename to OppAvg_OppScoreper40 (it's my opponent's average opponents (me) score per 40)
+    tempseasonteams = tempseasonteams.rename(columns = {otherprefix+coremetric:'OppAvg_'+otherprefix+coremetric})
+
+    # Merge in this info into irsg, for the opponent in irsg
+    rsg = pd.merge(rsg,tempseasonteams,left_on=['OppName','Season'],right_on=['TmName','Season'],how='left',suffixes=('','_y'))
+    del rsg['TmName_y']
+    
+    # In irsg, determine for that game how the Tm did vs Opp_Avg's
+    # Example, GameOppAdj_TmPFper40 = TmPFper40 - OppAvg_OppPFper40
+    rsg['GameOppAdj_'+OAmetric] = rsg[OAmetric] - rsg['OppAvg_'+otherprefix+coremetric]
+
+    # switch it for when you start with an opponent
+    if prefix == 'Opp':
+        rsg['GameOppAdj_'+OAmetric] = rsg['GameOppAdj_'+OAmetric] * -1
+    
+    # In iteamstemp, sum the opponent-adjusted metric and get a new average
+    # Example, sum(GameOppAdj_TmPFper40) gets you the TOTAL OA_PFper40
+    seasonteamstemp = rsg.groupby(['TmName','Season'])['GameOppAdj_'+OAmetric].sum().reset_index()
+
+    # bring that value back into iteams
+    seasonteams = pd.merge(seasonteams,seasonteamstemp,left_on=['TmName','Season'],right_on=['TmName','Season'],how='left',suffixes=('','_y'))
+    seasonteams = seasonteams.rename(columns = {'GameOppAdj_'+OAmetric:'OA_'+OAmetric})
+    seasonteams['OA_'+OAmetric] = seasonteams['OA_'+OAmetric] / seasonteams['GameMins'] * 40
+#    del iteams['TmName_y']
+
+# Opponent-adjust all metrics
+for x in {'Opp','Tm'}:
+    for column in metrics:
+        opponentadjust(x + column + 'per40')
+del column, x
+#opponentadjust('TmMarginper40')
+
+#testteamseason = seasonteams.loc[(seasonteams['TmName'] == 'Florida')&(seasonteams['Season'] == 2018)]
+#testrsg = rsg.loc[(rsg['TmName'] == 'Florida')&(rsg['Season'] == 2018)]
+
+
 
 # Benchmark time
 totaltime = time.time()-begin
