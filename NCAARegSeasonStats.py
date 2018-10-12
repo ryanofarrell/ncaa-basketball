@@ -6,7 +6,7 @@ Created on Mon Jul 30 20:39:24 2018
 
 import pandas as pd
 import time
-#import datetime as datetime
+import datetime as datetime
 #from sklearn.model_selection import train_test_split
 #from sklearn.ensemble import RandomForestRegressor
 #import numpy as np
@@ -177,6 +177,14 @@ seasonteams['OppFTPct'] = seasonteams['OppFTM'] / seasonteams['OppFTA']
 #seasonteams_cols = pd.DataFrame(list(seasonteams)).reset_index()
 #col_diffs = pd.merge(rsg_cols, seasonteams_cols, on=[0],how='outer')
 
+# Benchmark time
+poatime = time.time()-begin
+if poatime < 60:
+    print('Pre-Opponent-Adjust Time: ' + str(round((poatime),2)) + ' sec')
+else:
+    print('Pre-Opponent-Adjust Time: ' + str(round((poatime)/60,2)) + ' min')
+
+
 ###############################################################################
 ###############################################################################
 # Define opponentadjust UDF (for ease of opponent-adjusting metrics)
@@ -233,9 +241,28 @@ for x in {'Opp','Tm'}:
     for column in metrics:
         opponentadjust(x + column + 'per40')
 del column, x
-#opponentadjust('TmMarginper40')
 
-#testteamseason = seasonteams.loc[(seasonteams['TmName'] == 'Florida')&(seasonteams['Season'] == 2018)]
+# Opponent-adjust percentages
+for x in {'Opp','Tm'}:
+    for column in ('FG','FG3','FG2','FT'):
+        opponentadjust(x + column + 'Pct')
+del column, x
+    
+
+# Benchmark time
+prewritetime = time.time()-begin
+if prewritetime < 60:
+    print('OA Time: ' + str(round((prewritetime),2)) + ' sec')
+else:
+    print('OA Time: ' + str(round((prewritetime)/60,2)) + ' min')
+
+now = str(datetime.datetime.now().strftime('%Y-%m-%d %H-%M-%S'))
+rsg.to_csv('/Users/Ryan/Google Drive/ncaa-basketball-data/rsg_' + now + '.csv', index=False)
+seasonteams.to_csv('/Users/Ryan/Google Drive/ncaa-basketball-data/seasonteams_' + now + '.csv', index=False)
+
+
+#testseasonteams = seasonteams.loc[(seasonteams['TmName'] == 'Florida')&(seasonteams['Season'] <= 2018)]
+#testseason = seasonteams.loc[(seasonteams['Season'] == 2018)]
 #testrsg = rsg.loc[(rsg['TmName'] == 'Florida')&(rsg['Season'] == 2018)]
 
 
@@ -247,4 +274,4 @@ if totaltime < 60:
 else:
     print('Total Process Time: ' + str(round((totaltime)/60,2)) + ' min')
 
-del begin, totaltime
+del begin, totaltime, poatime
