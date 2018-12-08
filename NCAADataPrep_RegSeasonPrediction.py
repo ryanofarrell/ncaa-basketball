@@ -176,7 +176,7 @@ rsgdates = rsgdates.rename(columns = {'TmName':'GameCount'})
 
 # For testing purposes, limit the size to run end-to-end in reasonable time
 #rsgdates = rsgdates.loc[1:7]
-rsgdates = rsgdates.loc[rsgdates['Season'] == 2018]
+#rsgdates = rsgdates.loc[rsgdates['Season'] == 2018]
 
 ###############################################################################
 # Define opponentadjust UDF (for ease of opponent-adjusting metrics)
