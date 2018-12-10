@@ -112,6 +112,8 @@ rsg['GameMins'] = 40 + rsg['NumOT']*5
 rsg['TmTR'] = rsg['TmOR'] + rsg['TmDR']
 rsg['OppTR'] = rsg['OppOR'] + rsg['OppDR']
 
+# TODO add possession stuff
+
 # Count number of FGA2/FGM2
 rsg['TmFGM2'] = rsg['TmFGM'] - rsg['TmFGM3']
 rsg['TmFGA2'] = rsg['TmFGA'] - rsg['TmFGA3']
