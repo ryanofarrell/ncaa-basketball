@@ -50,16 +50,16 @@ def createreplacecsv(csvtoreplace,dataframetowrite):
     assert type(dataframetowrite) == pd.core.frame.DataFrame, 'Second argument is not a DataFrame'
 
 
-    print('Replacing:' + csvtoreplace)
+    print('Writing: ' + csvtoreplace)
 
     # Move current file to archive folder, rename file
     try:
         os.rename(csvtoreplace, newcsvpath + newcsvname)
-        print('Archived current' + currcsvname + '.csv into archive/ folder as ' + newcsvname)
+        print('Archived current ' + currcsvname + '.csv into archive/ folder as ' + newcsvname)
     except FileNotFoundError:
         print('No file archived; no file named ' + currcsvname + '.csv at given path')
     
     dataframetowrite.to_csv(currcsvpath + currcsvname + '.csv', index=False)
-    print('Created ' + currcsvname + '.csv in ' + currcsvpath)
+    print('Wrote dataframe to ' + currcsvname + '.csv in ' + currcsvpath)
 ###############################################################################
 ###############################################################################
