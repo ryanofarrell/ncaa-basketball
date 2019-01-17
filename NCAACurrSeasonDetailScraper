@@ -1,0 +1,491 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Dec 31 17:48:47 2018
+
+@author: Ryan
+"""
+
+      
+from bs4 import BeautifulSoup
+from urllib.request import urlopen
+from requests import get
+import pandas as pd
+import re
+from UDFs import createreplacecsv, printtitle
+import numpy as np
+
+printtitle('Running current season scraper')
+
+# TODO try except when scrape is finalized
+
+currseason = 2019
+
+webpage = "https://www.masseyratings.com/scores.php?s=305972&sub=11590&all=1"
+page = urlopen(webpage)
+soup = BeautifulSoup(page, 'lxml')
+NCAADataStr = str(soup.pre)
+del webpage, page, soup
+
+# Import Data into DF
+x = NCAADataStr.split('\n')
+rsgc_curr = pd.DataFrame(x, columns=['RawStr'])
+del NCAADataStr, x
+
+# Remove last 4 rows
+rsgc_curr = rsgc_curr[:-4]
+
+# Remove/replace strings
+rsgc_curr['RawStr'].replace(
+    regex=True, inplace=True, to_replace=r'&amp;', value=r'&')
+rsgc_curr['RawStr'].replace(
+    regex=True, inplace=True, to_replace=r'<pre>', value=r'')
+
+# Split string into columns
+rsgc_curr['GameDate'] = rsgc_curr['RawStr'].str[:10]
+rsgc_curr['TmName'] = rsgc_curr['RawStr'].str[10:36]
+rsgc_curr['TmPF'] = rsgc_curr['RawStr'].str[36:39]
+rsgc_curr['OppName'] = rsgc_curr['RawStr'].str[39:65]
+rsgc_curr['OppPF'] = rsgc_curr['RawStr'].str[65:68]
+rsgc_curr['GameOT'] = pd.to_numeric(
+    rsgc_curr['RawStr'].str[70:71], errors='coerce')
+rsgc_curr['GameOT'] = np.nan_to_num(rsgc_curr['GameOT'])
+del rsgc_curr['RawStr']
+
+# Strip Whitespaces
+rsgc_curr['GameDate'] = rsgc_curr['GameDate'].str.strip()
+rsgc_curr['TmPF'] = rsgc_curr['TmPF'].str.strip()
+rsgc_curr['TmName'] = rsgc_curr['TmName'].str.strip()
+rsgc_curr['OppName'] = rsgc_curr['OppName'].str.strip()
+rsgc_curr['OppPF'] = rsgc_curr['OppPF'].str.strip()
+
+rsgc_curr[['TmPF',
+          'OppPF']] = rsgc_curr[['TmPF',
+                                        'OppPF']].apply(pd.to_numeric)
+#rsgc_curr['GameDate'] = pd.to_datetime(rsgc_curr['GameDate'])
+
+# Calculate Margin and team locations
+rsgc_curr['TmLoc'] = ''
+rsgc_curr['Season'] = currseason
+rsgc_curr.loc[(rsgc_curr['TmName'].str[:1] == '@'), 'TmLoc'] = 'H'
+rsgc_curr.loc[(rsgc_curr['OppName'].str[:1] == '@'), 'TmLoc'] = 'A'
+rsgc_curr.loc[(rsgc_curr['OppName'].str[:1] != '@') &
+             (rsgc_curr['TmName'].str[:1] != '@'), 'TmLoc'] = 'N'
+
+# Remove @
+rsgc_curr['TmName'].replace(regex=True, inplace=True, to_replace=r'@', value=r'')
+rsgc_curr['OppName'].replace(
+    regex=True, inplace=True, to_replace=r'@', value=r'')
+
+# Get the team IDs
+teamspellings = pd.read_csv(
+    filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle/TeamSpellings.csv',
+    encoding="ISO-8859-1")
+
+teamspellings = teamspellings.rename(columns = {'TeamID':'TmID'})
+rsgc_curr['TeamNameSpelling'] = rsgc_curr['TmName'].str.lower()
+rsgc_curr = pd.merge(rsgc_curr,teamspellings,how = 'left', on = ['TeamNameSpelling'])
+del rsgc_curr['TeamNameSpelling']
+
+teamspellings = teamspellings.rename(columns = {'TmID':'OppID'})
+rsgc_curr['TeamNameSpelling'] = rsgc_curr['OppName'].str.lower()
+rsgc_curr = pd.merge(rsgc_curr,teamspellings,how = 'left', on = ['TeamNameSpelling'])
+del rsgc_curr['TeamNameSpelling']
+
+teamspellings = teamspellings.rename(columns = {'OppID':'TeamID'})
+
+#del rsgc_curr['TmName'], rsgc_curr['OppName']
+
+# Duplicate RSG
+lrsgc_curr = rsgc_curr.copy()
+lrsgc_curr = lrsgc_curr.rename(columns = {
+                            'TmName':'OppName'
+                            ,'TmID':'OppID'
+                            ,'TmPF':'OppPF'
+                            ,'OppName':'TmName'
+                            ,'OppID':'TmID'
+                            ,'OppPF':'TmPF'
+                            })
+
+# Store homes in temp col, so they chan then be written on the column
+lrsgc_curr.loc[lrsgc_curr['TmLoc'] == 'A','tmp'] = 'H'
+lrsgc_curr.loc[lrsgc_curr['TmLoc'] == 'H','TmLoc'] = 'A'
+lrsgc_curr.loc[lrsgc_curr['tmp'] == 'H','TmLoc'] = 'H'
+del lrsgc_curr['tmp']
+
+# Check before appending that same columns exist
+assert list(lrsgc_curr).sort() == list(rsgc_curr).sort(), 'Not the same columns between rsgc_curr and lrsgc_curr'
+
+rsgc_curr = rsgc_curr.append(lrsgc_curr)
+del lrsgc_curr
+
+# Import rsgd_curr from file
+rsgd_curr = pd.read_csv(
+        filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/rsgd_curr.csv')
+
+dates_det = list(rsgd_curr['GameDate'].unique())
+dates_com = list(rsgc_curr['GameDate'].unique())
+datestoscrape = pd.DataFrame(sorted(list(set(dates_com) - set(dates_det))),columns = ['Date'])
+del dates_det, dates_com
+
+if len(datestoscrape) == 0:
+    print ('No new games to scrape...')
+else:
+    
+    # Get distinct dates from scraped 
+    datestoscrape['Year'] = datestoscrape['Date'].str[0:4].astype(int)
+    datestoscrape['Month'] = datestoscrape['Date'].str[5:7].astype(int)
+    datestoscrape['Day'] = datestoscrape['Date'].str[8:].astype(int)
+    
+    # Create list of webpages to scrape from later
+    webpages = []
+    for row in datestoscrape.iterrows():
+        webpages.append("https://www.sports-reference.com/cbb/boxscores/index.cgi?month=" + str(row[1]['Month']) + \
+                    "&day=" + str(row[1]['Day']) + \
+                    "&year=" + str(row[1]['Year']))
+    del row
+    
+    # On each of those day webpages, scrape the link to the game's results
+    links = []  
+    for webpage in webpages:
+        print('Working on ' + webpage)
+        try:        
+            response = get(webpage)
+            html_soup = BeautifulSoup(response.text, 'html.parser')
+            games = html_soup.find_all('div',class_ = 'game_summary nohover')
+            for gamenum in range(0,len(games)):
+                currgame = games[gamenum]
+                currgamelink = currgame.find('td', class_ = 'right gamelink')
+                currgamelink = currgamelink.a
+                links.append(str(currgamelink))
+        except:
+            print('Skipped ' + webpage)
+            pass
+    links = pd.DataFrame(links, columns = ['RawStr'])
+    links['GameLink'] = 'https://www.sports-reference.com' + links['RawStr'].str.extract(r'"(.*)"' ,expand=True)
+    del links['RawStr'], webpage, gamenum, games
+    
+    # Init dataframes 
+    rsgd_curr_new = pd.DataFrame()
+    
+    # Init variables
+    GameDate = []
+    TmName = []
+    TmPF = []
+    TmFGM = []
+    TmFGA = []
+    TmFG2M = []
+    TmFG2A = []
+    TmFG3M = []
+    TmFG3A = []
+    TmFTM = []
+    TmFTA = []
+    TmORB = []
+    TmDRB = []
+    TmTRB = []
+    TmAst = []
+    TmStl = []
+    TmBlk = []
+    TmTO = []
+    TmFoul = []
+    OppName = []
+    OppPF = []
+    OppFGM = []
+    OppFGA = []
+    OppFG2M = []
+    OppFG2A = []
+    OppFG3M = []
+    OppFG3A = []
+    OppFTM = []
+    OppFTA = []
+    OppORB = []
+    OppDRB = []
+    OppTRB = []
+    OppAst = []
+    OppStl = []
+    OppBlk = []
+    OppTO = []
+    OppFoul = []
+    
+    n = 1
+    
+    # Loop through all game links
+    for currgamelink in links['GameLink']:
+        try:
+            GameDate = currgamelink[47:57]
+            print('Working on ' + str(n) + ' of ' + str(len(links)) + ' - ' + currgamelink[47:])
+            response = get(currgamelink)
+            html_soup = BeautifulSoup(response.text, 'html.parser')
+            boxes = html_soup.find_all('div',id = re.compile(r'all_box-score-basic'))
+            assert len(boxes) == 2, 'Can not find two boxes at' + currgamelink
+        
+            # Get Tm records into variables
+            Tmfooter = boxes[0].tfoot
+            TmName = str(boxes[0].h2.text)
+            TmPF = int(Tmfooter.find('td', attrs={'data-stat': "pts"}).text)
+            TmFGM = int(Tmfooter.find('td', attrs={'data-stat': "fg"}).text)
+            TmFGA = int(Tmfooter.find('td', attrs={'data-stat': "fga"}).text)
+            TmFG2M = int(Tmfooter.find('td', attrs={'data-stat': "fg2"}).text)
+            TmFG2A = int(Tmfooter.find('td', attrs={'data-stat': "fg2a"}).text)
+            TmFG3M = int(Tmfooter.find('td', attrs={'data-stat': "fg3"}).text)
+            TmFG3A = int(Tmfooter.find('td', attrs={'data-stat': "fg3a"}).text)
+            TmFTM = int(Tmfooter.find('td', attrs={'data-stat': "ft"}).text)
+            TmFTA = int(Tmfooter.find('td', attrs={'data-stat': "fta"}).text)
+            TmORB = int(Tmfooter.find('td', attrs={'data-stat': "orb"}).text)
+            TmDRB = int(Tmfooter.find('td', attrs={'data-stat': "drb"}).text)
+            TmTRB = int(Tmfooter.find('td', attrs={'data-stat': "trb"}).text)
+            TmAst = int(Tmfooter.find('td', attrs={'data-stat': "ast"}).text)
+            TmStl = int(Tmfooter.find('td', attrs={'data-stat': "stl"}).text)
+            TmBlk = int(Tmfooter.find('td', attrs={'data-stat': "blk"}).text)
+            TmTO = int(Tmfooter.find('td', attrs={'data-stat': "tov"}).text)
+            TmFoul = int(Tmfooter.find('td', attrs={'data-stat': "pf"}).text)
+            
+            # Get Opp records into variables
+            Oppfooter = boxes[1].tfoot
+            OppName = str(boxes[1].h2.text)
+            OppPF = int(Oppfooter.find('td', attrs={'data-stat': "pts"}).text)
+            OppFGM = int(Oppfooter.find('td', attrs={'data-stat': "fg"}).text)
+            OppFGA = int(Oppfooter.find('td', attrs={'data-stat': "fga"}).text)
+            OppFG2M = int(Oppfooter.find('td', attrs={'data-stat': "fg2"}).text)
+            OppFG2A = int(Oppfooter.find('td', attrs={'data-stat': "fg2a"}).text)
+            OppFG3M = int(Oppfooter.find('td', attrs={'data-stat': "fg3"}).text)
+            OppFG3A = int(Oppfooter.find('td', attrs={'data-stat': "fg3a"}).text)
+            OppFTM = int(Oppfooter.find('td', attrs={'data-stat': "ft"}).text)
+            OppFTA = int(Oppfooter.find('td', attrs={'data-stat': "fta"}).text)
+            OppORB = int(Oppfooter.find('td', attrs={'data-stat': "orb"}).text)
+            OppDRB = int(Oppfooter.find('td', attrs={'data-stat': "drb"}).text)
+            OppTRB = int(Oppfooter.find('td', attrs={'data-stat': "trb"}).text)
+            OppAst = int(Oppfooter.find('td', attrs={'data-stat': "ast"}).text)
+            OppStl = int(Oppfooter.find('td', attrs={'data-stat': "stl"}).text)
+            OppBlk = int(Oppfooter.find('td', attrs={'data-stat': "blk"}).text)
+            OppTO = int(Oppfooter.find('td', attrs={'data-stat': "tov"}).text)
+            OppFoul = int(Oppfooter.find('td', attrs={'data-stat': "pf"}).text)
+            
+        
+            rsgd_curr_new = rsgd_curr_new.append(
+                    {'GameDate' : GameDate
+                    ,'TmName' : TmName
+                    ,'TmPF': TmPF
+                    ,'TmFGM' : TmFGM
+                    ,'TmFGA' : TmFGA
+                    ,'TmFG2M' : TmFG2M
+                    ,'TmFG2A' : TmFG2A
+                    ,'TmFG3M' : TmFG3M
+                    ,'TmFG3A' : TmFG3A
+                    ,'TmFTM' : TmFTM
+                    ,'TmFTA' : TmFTA
+                    ,'TmORB' : TmORB
+                    ,'TmDRB' : TmDRB
+                    ,'TmTRB' : TmTRB
+                    ,'TmAst' : TmAst
+                    ,'TmStl' : TmStl
+                    ,'TmBlk' : TmBlk
+                    ,'TmTO' : TmTO
+                    ,'TmFoul' : TmFoul
+                    ,'OppName' : OppName
+                    ,'OppPF': OppPF
+                    ,'OppFGM' : OppFGM
+                    ,'OppFGA' : OppFGA
+                    ,'OppFG2M' : OppFG2M
+                    ,'OppFG2A' : OppFG2A
+                    ,'OppFG3M' : OppFG3M
+                    ,'OppFG3A' : OppFG3A
+                    ,'OppFTM' : OppFTM
+                    ,'OppFTA' : OppFTA
+                    ,'OppORB' : OppORB
+                    ,'OppDRB' : OppDRB
+                    ,'OppTRB' : OppTRB
+                    ,'OppAst' : OppAst
+                    ,'OppStl' : OppStl
+                    ,'OppBlk' : OppBlk
+                    ,'OppTO' : OppTO
+                    ,'OppFoul' : OppFoul
+                    },
+                    ignore_index = True
+                    )
+        
+            rsgd_curr_new = rsgd_curr_new.append(
+                    {'GameDate' : GameDate
+                    ,'TmName' : OppName
+                    ,'TmPF': OppPF
+                    ,'TmFGM' : OppFGM
+                    ,'TmFGA' : OppFGA
+                    ,'TmFG2M' : OppFG2M
+                    ,'TmFG2A' : OppFG2A
+                    ,'TmFG3M' : OppFG3M
+                    ,'TmFG3A' : OppFG3A
+                    ,'TmFTM' : OppFTM
+                    ,'TmFTA' : OppFTA
+                    ,'TmORB' : OppORB
+                    ,'TmDRB' : OppDRB
+                    ,'TmTRB' : OppTRB
+                    ,'TmAst' : OppAst
+                    ,'TmStl' : OppStl
+                    ,'TmBlk' : OppBlk
+                    ,'TmTO' : OppTO
+                    ,'TmFoul' : OppFoul
+                    ,'OppName' : TmName
+                    ,'OppPF': TmPF
+                    ,'OppFGM' : TmFGM
+                    ,'OppFGA' : TmFGA
+                    ,'OppFG2M' : TmFG2M
+                    ,'OppFG2A' : TmFG2A
+                    ,'OppFG3M' : TmFG3M
+                    ,'OppFG3A' : TmFG3A
+                    ,'OppFTM' : TmFTM
+                    ,'OppFTA' : TmFTA
+                    ,'OppORB' : TmORB
+                    ,'OppDRB' : TmDRB
+                    ,'OppTRB' : TmTRB
+                    ,'OppAst' : TmAst
+                    ,'OppStl' : TmStl
+                    ,'OppBlk' : TmBlk
+                    ,'OppTO' : TmTO
+                    ,'OppFoul' : TmFoul
+                    },
+                    ignore_index = True
+                    )
+        except TypeError:
+            print('Skipping number ' + str(n))
+        n = n + 1
+        
+    del TmName, TmPF, TmFGM, TmFGA, TmFG2M, TmFG2A, TmFG3M, TmFG3A, TmFTM, TmFTA
+    del TmORB, TmDRB, TmTRB, TmAst, TmStl, TmBlk, TmFoul, TmTO
+    del OppName, OppPF, OppFGM, OppFGA, OppFG2M, OppFG2A, OppFG3M, OppFG3A, OppFTM, OppFTA
+    del OppORB, OppDRB, OppTRB, OppAst, OppStl, OppBlk, OppFoul, OppTO
+    del GameDate, n
+    del boxes, currgamelink
+    
+    # Remove records from team names
+    rsgd_curr_new['TmName'].replace(regex=True, inplace=True, to_replace=r'( \([0-9]+-[0-9]+\))', value=r'')
+    rsgd_curr_new['OppName'].replace(regex=True, inplace=True, to_replace=r'( \([0-9]+-[0-9]+\))', value=r'')
+    
+    ##
+    # These are known data issues in SportsReference; on full run, uncomment
+    
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Charlotte') & 
+    #        (rsg_curr_new['OppName'] == 'Texas Christian')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-23')
+    #        ,'GameDate'] = '2018-12-22'
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Texas Christian') & 
+    #        (rsg_curr_new['OppName'] == 'Charlotte')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-23')
+    #        ,'GameDate'] = '2018-12-22'
+    #
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Charlotte') & 
+    #        (rsg_curr_new['OppName'] == 'Rhode Island')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-24')
+    #        ,'GameDate'] = '2018-12-23'
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Rhode Island') & 
+    #        (rsg_curr_new['OppName'] == 'Charlotte')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-24')
+    #        ,'GameDate'] = '2018-12-23'
+    #
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'South Dakota') & 
+    #        (rsg_curr_new['OppName'] == 'North Dakota State')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-29')
+    #        ,'GameDate'] = '2018-12-28'
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'North Dakota State') & 
+    #        (rsg_curr_new['OppName'] == 'South Dakota')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-29')
+    #        ,'GameDate'] = '2018-12-28'
+    #
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Purdue-Fort Wayne') & 
+    #        (rsg_curr_new['OppName'] == 'North Dakota')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-29')
+    #        ,'GameDate'] = '2018-12-28'
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'North Dakota') & 
+    #        (rsg_curr_new['OppName'] == 'Purdue-Fort Wayne')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-29')
+    #        ,'GameDate'] = '2018-12-28'
+    #
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Colorado') & 
+    #        (rsg_curr_new['OppName'] == 'Charlotte')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-25')
+    #        ,'GameDate'] = '2018-12-24'
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Charlotte') & 
+    #        (rsg_curr_new['OppName'] == 'Colorado')  &
+    #        (rsg_curr_new['GameDate'] == '2018-12-25')
+    #        ,'GameDate'] = '2018-12-24'
+    #
+    ## Modify mismatched game scores
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Baylor') & 
+    #        (rsg_curr_new['OppName'] == 'Prairie View')  &
+    #        (rsg_curr_new['GameDate'] == '2018-11-12')
+    #        ,'OppPF'] = 80
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Prairie View') & 
+    #        (rsg_curr_new['OppName'] == 'Baylor')  &
+    #        (rsg_curr_new['GameDate'] == '2018-11-12')
+    #        ,'TmPF'] = 80
+    #
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Seton Hall') & 
+    #        (rsg_curr_new['OppName'] == 'Grand Canyon')  &
+    #        (rsg_curr_new['GameDate'] == '2018-11-22')
+    #        ,'OppPF'] = 75
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Grand Canyon') & 
+    #        (rsg_curr_new['OppName'] == 'Seton Hall')  &
+    #        (rsg_curr_new['GameDate'] == '2018-11-22')
+    #        ,'TmPF'] = 75
+    #
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Nevada') & 
+    #        (rsg_curr_new['OppName'] == 'Utah State')  &
+    #        (rsg_curr_new['GameDate'] == '2019-01-02')
+    #        ,'OppPF'] = 49
+    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Utah State') & 
+    #        (rsg_curr_new['OppName'] == 'Nevada')  &
+    #        (rsg_curr_new['GameDate'] == '2019-01-02')
+    #        ,'TmPF'] = 49
+    
+#    rsgd_curr.loc[(rsgd_curr['TmName'] == 'Syracuse') & 
+#            (rsgd_curr['OppName'] == 'St. Bonaventure')  &
+#            (rsgd_curr['GameDate'] == '2018-12-29')
+#            ,'OppPF'] = 48
+#    rsgd_curr.loc[(rsgd_curr['TmName'] == 'St. Bonaventure') & 
+#            (rsgd_curr['OppName'] == 'Syracuse')  &
+#            (rsgd_curr['GameDate'] == '2018-12-29')
+#            ,'TmPF'] = 48
+
+    
+    # Change column types
+    #rsgd_curr_new['GameDate'] = pd.to_datetime(rsgd_curr_new['GameDate'])
+    
+    # Merge in team IDs
+    teamspellings = teamspellings.rename(columns = {'TeamID':'TmID'})
+    rsgd_curr_new['TeamNameSpelling'] = rsgd_curr_new['TmName'].str.lower()
+    rsgd_curr_new = pd.merge(rsgd_curr_new,teamspellings,how = 'left', on = ['TeamNameSpelling'])
+    del rsgd_curr_new['TeamNameSpelling']
+    
+    teamspellings = teamspellings.rename(columns = {'TmID':'OppID'})
+    rsgd_curr_new['TeamNameSpelling'] = rsgd_curr_new['OppName'].str.lower()
+    rsgd_curr_new = pd.merge(rsgd_curr_new,teamspellings,how = 'left', on = ['TeamNameSpelling'])
+    del rsgd_curr_new['TeamNameSpelling']
+    teamspellings = teamspellings.rename(columns = {'OppID':'TeamID'})
+    
+    rsgd_curr = rsgd_curr.append(rsgd_curr_new)
+    
+    # Merge together rsg_curr and rsg, then determine which rsg_curr games are missing
+    rsg_curr = pd.merge(rsgc_curr
+                        ,rsgd_curr
+                        ,on = ['GameDate',
+                               'TmID','OppID'
+                               ,'TmPF','OppPF'
+                               ],
+                        how = 'left',
+                        suffixes = ('_com','_det'))
+    md_read_in = pd.read_csv(
+        filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/rsgscrape_missingdetails.csv')
+    
+    missingdetails = rsg_curr.loc[
+            rsg_curr['TmName_det'].isnull()]
+    
+    newmissingdetails = len(missingdetails) - len(md_read_in)
+    
+    if newmissingdetails == 0:
+        print('\nAll records have detailed results')
+    else:
+        print(str(newmissingdetails) + ' new records missing detailed results')
+    
+    createreplacecsv('/Users/Ryan/Google Drive/ncaa-basketball-data/rsgc_curr.csv',rsgc_curr)
+    createreplacecsv('/Users/Ryan/Google Drive/ncaa-basketball-data/rsgd_curr.csv',rsgd_curr)
+    createreplacecsv('/Users/Ryan/Google Drive/ncaa-basketball-data/rsg_curr.csv',rsg_curr)
+    createreplacecsv('/Users/Ryan/Google Drive/ncaa-basketball-data/rsgscrape_missingdetails.csv',missingdetails)
