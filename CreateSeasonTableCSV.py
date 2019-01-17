@@ -9,7 +9,7 @@ Created on Fri Dec 21 11:03:20 2018
 
 import pandas as pd
 from UDFs import createreplacecsv
-
+# TODO morgan state vs howard wtf?
 
 seasonteams = pd.read_csv('/Users/Ryan/Google Drive/ncaa-basketball-data/seasonteams.csv')
 
@@ -19,7 +19,7 @@ inclcolumns = ['Season'
                ,'TmWin'
                ,'TmLoss'
                ,'TmSoS'
-               ,'Rank_TmSoS'
+#               ,'Rank_TmSoS'
                ,'TourneyWin'
                ,'TourneyGame'
                ,'PlayInWin'
@@ -36,6 +36,7 @@ metrics = ['Margin'
 suffixes = [
             'perGame'
             ,'per40'
+            ,'perPoss'
             ]
 
 inclmetrics = []
@@ -45,8 +46,8 @@ for prefix in ['Tm','Opp']:
         for suffix in suffixes:
             inclmetrics.append(prefix + metric + suffix)
             inclmetrics.append('OA_' + prefix + metric + suffix)
-            inclmetrics.append('Rank_' + prefix + metric + suffix)
-            inclmetrics.append('Rank_OA_' + prefix + metric + suffix)
+#            inclmetrics.append('Rank_' + prefix + metric + suffix)
+#            inclmetrics.append('Rank_OA_' + prefix + metric + suffix)
 
 for metric in inclmetrics:
     inclcolumns.append(metric)
