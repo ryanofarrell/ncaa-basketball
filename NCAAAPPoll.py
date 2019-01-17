@@ -6,19 +6,18 @@ Created on Sun Dec 16 20:18:29 2018
 @author: Ryan
 """
 
-print('Running Poll Scraper')
-
-
 
 from bs4 import BeautifulSoup
-from urllib.request import urlopen
+#from urllib.request import urlopen
 from requests import get
 import pandas as pd
-from functools import reduce
+#from functools import reduce
 import re
 import numpy as np
-from UDFs import createreplacecsv
+from UDFs import createreplacecsv, printtitle
 from datetime import timedelta
+
+printtitle('Running AP poll scraper')
 
 
 # TODO assertion with crazy table strutures
@@ -132,7 +131,7 @@ for pollnum in pollnumrange:
         print('Successful scrape...')
     # If scrape is unsuccessful, change while loop condition to exit
     except:
-        print('Scrape failed at poll: ' + str(pollnum))
+        print('Scrape failed at poll #' + str(pollnum))
         break
 
 # Modify rankhistory output
