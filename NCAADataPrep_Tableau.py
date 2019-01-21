@@ -21,7 +21,7 @@ printtitle('Running season calculations')
 timer = timer()
 timer.start()
 # Pick if you want a full re-run, or just do current season
-runall = False
+runall = True
 # Set current season variable
 currseason = 2019
 
@@ -140,25 +140,44 @@ for x in {'Opp', 'Tm'}:
         summables.append(x + column)
 del column, x
 
-rankmetrics = ['TmSoS']
+descendingrankmetrics = ['TmSoS']
+ascendingrankmetrics = []
+negativecoremetrics = ['Foul','TO']
+
+# Positive:
+# PF, Margin, FGM, FGA, FGM3, FGA3, FGM2, FGA2, FTA, FTM, AST, OR, DR, TR, STL, BLK
+
+# Foul, TO
+
+# More = better: Tm * Positive
+# More = Better: Opp * NEgative
+# LEss = better: Tm * Negative
+# LEss = Better: Opp * Positive
+
+# Opp = -1, Negative = -1, Tm = 1, Pos = 1
+
 for oa in {'','OA_'}:
     for prefix in {'Opp', 'Tm'}:
         for coremetric in metrics:
             for suffix in {'perGame','per40','perPoss'}:
-                rankmetrics.append(oa + prefix + coremetric + suffix)
-del oa, prefix, coremetric, suffix
-
-
-# Things that I want more of:
-# PF, Margin, FGM, FGA, FGM3, FGA3, FGM2, FGA2, FTA, FTM, AST, OR, DR, TR, STL, BLK
-
-# Things I want less of: 
-# Foul, TO
-
-# TODO update this once caring about other metrics
-#ascendingrankmetrics = [
-#        'OppPFper40','OppPFperGame','OppPFperPoss'
-#        ,'OppMarginper40','OppMarginperGame','OppMarginperPoss']
+                if prefix == 'Opp':
+                    # Need special handling because OA stuff in inversed
+                    if oa == 'OA_':
+                        x = 1
+                    else:
+                        x = -1
+                else:
+                    x = 1
+                if coremetric in negativecoremetrics:
+                    y = -1
+                else:
+                    y = 1
+                z = x*y
+                if z == 1:
+                    descendingrankmetrics.append(oa + prefix + coremetric + suffix)
+                else:
+                    ascendingrankmetrics.append(oa + prefix + coremetric + suffix)
+del oa, prefix, coremetric, suffix, negativecoremetrics, x, y, z
 
 ###############################################################################
 ###############################################################################
@@ -195,7 +214,7 @@ rsg_curr_nulls.loc[rsg_curr_nulls['TmName_com'].isin(currseason_lowgames['TmName
 rsg_curr_nulls.loc[rsg_curr_nulls['OppName_com'].isin(currseason_lowgames['TmName_com']),'NullCause'] = 'LowOppGames'
 
 print(str(len(rsg_curr_nulls.loc[rsg_curr_nulls['NullCause'] == ''])) + ' unexplained null games...')
-del currseason_lowgames, rsg_curr_nulls
+del currseason_lowgames
 
 # Drop non-mapped teams (DII, exhibitions)
 lenpredrop = len(rsg_curr)
@@ -484,16 +503,8 @@ for workingseason in seasonstoloop:
     rsg_workingseason = rsg_tocalc.loc[rsg_tocalc['Season'] == workingseason]
 
     # Create current season seasonteams, summing all summables
-    # TODO why is summables not summing GameMins?????????????
     st_workingseason = rsg_workingseason.groupby(
             ['TmID', 'TmName'])[summables].sum().reset_index()
-#    st_workingseason_wtf = rsg_workingseason.groupby(
-#            ['TmID', 'TmName'])['TmMins','OppMins'].sum().reset_index()
-#    st_workingseason = st_workingseason.merge(
-#            st_workingseason_wtf,
-#            how='inner',
-#            on=['TmID','TmName'])
-#    del st_workingseason_wtf
 
     # Add season column to seasonteams_currseason
     st_workingseason['Season'] = workingseason
@@ -515,30 +526,32 @@ for workingseason in seasonstoloop:
     # Get SoS metric
     st_workingseason['TmSoS'] = st_workingseason['OA_TmMarginper40'] - st_workingseason['TmMarginper40']
     
-    # TODO is this duplicate with OppWin?
     # Get Losses into st_workingseason
     st_workingseason['TmLoss'] = st_workingseason['TmGame'] - st_workingseason['TmWin']
     
-#    # Rank all metrics
-#    for metric in rankmetrics:
-#        if metric in ascendingrankmetrics:
-#            # TODO check if values are null, then don't rank
-#            st_workingseason['Rank_' + metric ] = st_workingseason[metric].rank(method = 'min',
-#                                                    ascending = True,
-#                                                    na_option = 'bottom')
-#        else:
-#            st_workingseason['Rank_' + metric] = st_workingseason[metric].rank(method = 'min',
-#                                                    ascending = False,
-#                                                    na_option = 'bottom')
-#    
-#    # SOS & Rank
-#    
-#    del metric
+    # Rank all metrics
+    for metric in ascendingrankmetrics:
+        if st_workingseason[metric].isnull().values.any():
+            st_workingseason['Rank_' + metric ] = 0
+        else:
+            st_workingseason['Rank_' + metric ] = st_workingseason[metric].rank(method = 'min',
+                                                ascending = True,
+                                                na_option = 'bottom')
+    for metric in descendingrankmetrics:
+        if st_workingseason[metric].isnull().values.any():
+            st_workingseason['Rank_' + metric ] = 0
+        else:
+            st_workingseason['Rank_' + metric ] = st_workingseason[metric].rank(method = 'min',
+                                                    ascending = False,
+                                                    na_option = 'bottom')
+    
+    del metric
 
     # Append the working seasons output to the total seasonteams output
     seasonteams_out = seasonteams_out.append(st_workingseason)
 
 del st_workingseason, rsg_workingseason, rsg_tocalc
+del descendingrankmetrics, ascendingrankmetrics
 
 seasonteams_out = seasonteams_out.reset_index()
 rsg_out = rsg_out.reset_index()
@@ -823,160 +836,3 @@ timer.end()
 ##                          , 'GameOppAdj_OppPF'
 #                          ]]
 
-
-########################################
-## Seasonteams prep for Season Table Dashboard
-########################################
-
-
-# TODO Deal with these later
-#TourneyResults2017 = pd.read_csv(filepath_or_buffer = '/Users/Ryan/Google Drive/HistoricalNCAAData/2017TournamentResults.csv')
-#rsgcDates = pd.read_csv(filepath_or_buffer = '/Users/Ryan/Google Drive/HistoricalNCAAData/rsgcDates.csv')
-#TourneyGamesDates = pd.read_csv(filepath_or_buffer = '/Users/Ryan/Google Drive/HistoricalNCAAData/TourneyGamesDates.csv')
-#TourneySlots = pd.read_csv(filepath_or_buffer = '/Users/Ryan/Google Drive/HistoricalNCAAData/TourneySlots.csv')
-
-
-
-
-##
-#
-#
-#
-#
-# # Merge results files
-# del TourneyResults2017['Unnamed: 0']
-# TourneyResults2017 = TourneyResults2017.rename(columns = {'Wteam':'Team_Name'})
-# TourneyResults2017 = pd.merge(TourneyResults2017,Teams,on=['Team_Name'],how='left')
-# del TourneyResults2017['Team_Name']
-# TourneyResults2017 = TourneyResults2017.rename(columns = {'Team_Id':'Wteam'})
-# TourneyResults2017 = TourneyResults2017.rename(columns = {'Lteam':'Team_Name'})
-# TourneyResults2017 = pd.merge(TourneyResults2017,Teams,on=['Team_Name'],how='left')
-# TourneyResults2017 = TourneyResults2017.rename(columns = {'Team_Id':'Lteam'})
-# del TourneyResults2017['Team_Name']
-# del TourneyResults2017['Season_x'], TourneyResults2017['Season_y']
-# TourneyResults2017['Season'] = 2017
-# TourneyResults = TourneyResults.append(TourneyResults2017)
-# del TourneyResults2017
-#
-# # Pull seeds into results
-# TourneySeeds = TourneySeeds.rename(columns = {'Team':'Wteam'})
-# TourneyResults = pd.merge(TourneyResults,TourneySeeds,on=['Season','Wteam'])
-# TourneySeeds = TourneySeeds.rename(columns = {'Wteam':'Team'})
-# TourneyResults = TourneyResults.rename(columns = {'Seed':'WteamSeed'})
-# TourneySeeds = TourneySeeds.rename(columns = {'Team':'Lteam'})
-# TourneyResults = pd.merge(TourneyResults,TourneySeeds,on=['Season','Lteam'])
-# TourneySeeds = TourneySeeds.rename(columns = {'Lteam':'Team_Id'})
-# TourneyResults = TourneyResults.rename(columns = {'Seed':'LteamSeed'})
-#
-# # Play-in game flag, seeds
-# TourneyResults['PlayInFlag'] = np.where((TourneyResults['WteamSeed'].str.len() == 4) & (TourneyResults['LteamSeed'].str.len() == 4), 'Y', '')
-# TourneyResults['WteamSeed'] = pd.to_numeric(TourneyResults['WteamSeed'].str[1:3])
-# TourneyResults['LteamSeed'] = pd.to_numeric(TourneyResults['LteamSeed'].str[1:3])
-# TourneyResults = TourneyResults[TourneyResults['PlayInFlag']!='Y']
-#
-# # Get num of wins for team in tourney
-# TourneyWins = TourneyResults.groupby(['Wteam','Season'])[['Wscore']].agg('count').reset_index()
-# TourneyWins = TourneyWins.rename(columns = {'Wscore':'TourneyWins','Wteam':'Team_Id'})
-# TourneyLosses = TourneyResults.groupby(['Lteam','Season'])[['Lscore']].agg('count').reset_index()
-# TourneyLosses = TourneyLosses.rename(columns = {'Lscore':'TourneyLosses','Lteam':'Team_Id'})
-# SeasonTeams = pd.merge(TourneyWins, SeasonTeams,on=['Team_Id','Season'],how='right')
-# SeasonTeams = pd.merge(TourneyLosses, SeasonTeams,on=['Team_Id','Season'],how='right')
-# SeasonTeams.fillna(0,inplace=True)
-# del TourneyWins, TourneyLosses
-# SeasonTeams['TourneyGames'] = SeasonTeams['TourneyWins'] + SeasonTeams['TourneyLosses']
-# SeasonTeams['TourneyApp'] = np.where((SeasonTeams['TourneyGames'] >= 1), 'Y', '')
-#
-# # Get Tourney Seeds into SeasonTeams
-# SeasonTeams = pd.merge(TourneySeeds, SeasonTeams,on=['Team_Id','Season'],how='right')
-# SeasonTeams['Seed'] = pd.to_numeric(SeasonTeams['Seed'].str[1:3])
-# SeasonTeams['Seed'][(SeasonTeams['TourneyApp'] != 'Y')] = ''
-# SeasonTeams['Seed'] = pd.to_numeric(SeasonTeams['Seed'])
-#
-# # Get 2018 Tourney Results In
-# # =============================================================================
-# TourneySeeds18 = pd.read_csv(filepath_or_buffer = '/Users/Ryan/Google Drive/HistoricalNCAAData/18TourneySeeds.csv')
-# SeasonTeams = pd.merge(SeasonTeams, TourneySeeds18, on=['Season','Team_Name'],how='left')
-# SeasonTeams['Seed'] = SeasonTeams['Seed_x'].fillna(SeasonTeams['Seed_y'])
-# del SeasonTeams['Seed_x'], SeasonTeams['Seed_y']
-# SeasonTeams['TourneyApp'] = np.where((SeasonTeams['Seed'] >= 1), 'Y', '')
-# SeasonTeams['Season'] = pd.to_numeric(SeasonTeams['Season'])
-# #SeasonTeams['TourneyApp_x'] = SeasonTeams['TourneyApp_x'].replace(r'\s+', np.nan, regex=True)
-# #SeasonTeams['TourneyApp'] = SeasonTeams['TourneyApp_x'].fillna(SeasonTeams['TourneyApp_y'])
-# del SeasonTeams['TourneyApp_x'], SeasonTeams['TourneyApp_y']
-# del TourneySeeds18
-# # =============================================================================
-# ####################################################
-# ####################################################
-# ####################################################
-#
-# ####################################################
-# #######Tourney Games for Tableau    ################
-# ####################################################
-#
-# # Merge day 0 into rsgc
-# TourneyResults = pd.merge(TourneyResults,Seasons,on='Season',)
-# del TourneyResults['Regionw']
-# del TourneyResults['Regionx']
-# del TourneyResults['Regiony']
-# del TourneyResults['Regionz']
-#
-# # NOTE: This takes tons of HP so it is commented for now
-# #TourneyResults['Dayzero'] =  pd.to_datetime(TourneyResults['Dayzero'])
-# #temp = TourneyResults['Daynum'].apply(pd.np.ceil).apply(lambda x: pd.Timedelta(x, unit='D'))
-# #TourneyResults['Date'] = TourneyResults['Dayzero'] + temp
-# ## Export Date Info
-# #TourneyGamesDates = TourneyResults['Date']
-# #os.chdir('/Users/Ryan/Desktop/HistoricalNCAAData/')
-# #TourneyGamesDates.to_csv('TourneyGamesDates.csv',header=True)
-# del TourneyResults['Dayzero']
-# del TourneyResults['Daynum']
-# del TourneyGamesDates['Unnamed: 0']
-# TourneyResults = pd.merge(TourneyResults,TourneyGamesDates,left_index=True, right_index=True)
-# del TourneyGamesDates
-# TourneyResults['Date'] = TourneyResults['Date_x'].fillna(TourneyResults['Date_y'])
-# del TourneyResults['Date_x'], TourneyResults['Date_y'], TourneyResults['Wloc'], TourneyResults['PlayInFlag']
-#
-# # Rename things and append
-# TourneyResults = TourneyResults.rename(columns = {'Wteam':'Team_Id','Wscore':'TeamScore','Lscore':'OpponentScore'})
-# del Teams['Season']
-# TourneyResults = pd.merge(TourneyResults, Teams ,on=['Team_Id'],how='left')
-# TourneyResults = TourneyResults.rename(columns = {'Team_Name':'TeamName','Team_Id':'Team','Lteam':'Team_Id'})
-# TourneyResults = pd.merge(TourneyResults, Teams ,on=['Team_Id'],how='left')
-# TourneyResults = TourneyResults.rename(columns = {'Team_Name':'OpponentName','Team_Id':'Opponent'})
-# TourneyResults['Result'] = 'W'
-#
-# # Make Losses Df
-# TourneyLosses = pd.DataFrame(columns = ['Date'])
-# TourneyLosses['Date'] = TourneyResults['Date']
-# TourneyLosses['Team'] = TourneyResults['Opponent']
-# TourneyLosses['TeamName'] = TourneyResults['OpponentName']
-# TourneyLosses['Opponent'] = TourneyResults['Team']
-# TourneyLosses['OpponentName'] = TourneyResults['TeamName']
-# TourneyLosses['TeamScore'] = TourneyResults['OpponentScore']
-# TourneyLosses['OpponentScore'] = TourneyResults['TeamScore']
-# TourneyLosses['Numot'] = TourneyResults['Numot']
-# TourneyLosses['Season'] = TourneyResults['Season']
-# TourneyLosses['WteamSeed'] = TourneyResults['LteamSeed']
-# TourneyLosses['LteamSeed'] = TourneyResults['WteamSeed']
-# TourneyLosses['Result'] = 'L'
-#
-# # Combine them
-# TourneyResults = TourneyResults.append(TourneyLosses)
-# del TourneyLosses
-# TourneyResults['TourneyGame'] = 'Y'
-#
-# rsgc = rsgc.append(TourneyResults)
-# ####################################################
-# ####################################################
-# ####################################################
-#
-#
-# # Test DF
-# Test = SeasonTeams.loc[(SeasonTeams['Season'] == 2018) & (SeasonTeams['TourneyApp'] == 'Y')]
-# TestYear = rsgc.loc[(rsgc['Season'] == 2018)]
-#
-# middle = time.time()
-# printtime('Pre-Write time: ',middle-begin)
-#
-#
-#

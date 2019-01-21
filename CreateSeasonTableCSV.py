@@ -19,7 +19,7 @@ inclcolumns = ['Season'
                ,'TmWin'
                ,'TmLoss'
                ,'TmSoS'
-#               ,'Rank_TmSoS'
+               ,'Rank_TmSoS'
                ,'TourneyWin'
                ,'TourneyGame'
                ,'PlayInWin'
@@ -46,8 +46,8 @@ for prefix in ['Tm','Opp']:
         for suffix in suffixes:
             inclmetrics.append(prefix + metric + suffix)
             inclmetrics.append('OA_' + prefix + metric + suffix)
-#            inclmetrics.append('Rank_' + prefix + metric + suffix)
-#            inclmetrics.append('Rank_OA_' + prefix + metric + suffix)
+            inclmetrics.append('Rank_' + prefix + metric + suffix)
+            inclmetrics.append('Rank_OA_' + prefix + metric + suffix)
 
 for metric in inclmetrics:
     inclcolumns.append(metric)
