@@ -381,23 +381,6 @@ else:
     #        (rsg_curr_new['GameDate'] == '2018-12-24')
     #        ,'GameDate'] = '2018-12-23'
     #
-    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'South Dakota') & 
-    #        (rsg_curr_new['OppName'] == 'North Dakota State')  &
-    #        (rsg_curr_new['GameDate'] == '2018-12-29')
-    #        ,'GameDate'] = '2018-12-28'
-    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'North Dakota State') & 
-    #        (rsg_curr_new['OppName'] == 'South Dakota')  &
-    #        (rsg_curr_new['GameDate'] == '2018-12-29')
-    #        ,'GameDate'] = '2018-12-28'
-    #
-    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Purdue-Fort Wayne') & 
-    #        (rsg_curr_new['OppName'] == 'North Dakota')  &
-    #        (rsg_curr_new['GameDate'] == '2018-12-29')
-    #        ,'GameDate'] = '2018-12-28'
-    #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'North Dakota') & 
-    #        (rsg_curr_new['OppName'] == 'Purdue-Fort Wayne')  &
-    #        (rsg_curr_new['GameDate'] == '2018-12-29')
-    #        ,'GameDate'] = '2018-12-28'
     #
     #rsg_curr_new.loc[(rsg_curr_new['TmName'] == 'Colorado') & 
     #        (rsg_curr_new['OppName'] == 'Charlotte')  &
@@ -462,6 +445,24 @@ else:
     teamspellings = teamspellings.rename(columns = {'OppID':'TeamID'})
     
     rsgd_curr = rsgd_curr.append(rsgd_curr_new)
+    
+#    rsgd_curr.loc[(rsgd_curr['TmName'] == 'South Dakota') & 
+#            (rsgd_curr['OppName'] == 'North Dakota State')  &
+#            (rsgd_curr['GameDate'] == '2018-12-29')
+#            ,'GameDate'] = '2018-12-28'
+#    rsgd_curr.loc[(rsgd_curr['TmName'] == 'North Dakota State') & 
+#            (rsgd_curr['OppName'] == 'South Dakota')  &
+#            (rsgd_curr['GameDate'] == '2018-12-29')
+#            ,'GameDate'] = '2018-12-28'
+#    
+#    rsgd_curr.loc[(rsgd_curr['TmName'] == 'Purdue-Fort Wayne') & 
+#            (rsgd_curr['OppName'] == 'North Dakota')  &
+#            (rsgd_curr['GameDate'] == '2018-12-29')
+#            ,'GameDate'] = '2018-12-28'
+#    rsgd_curr.loc[(rsgd_curr['TmName'] == 'North Dakota') & 
+#            (rsgd_curr['OppName'] == 'Purdue-Fort Wayne')  &
+#            (rsgd_curr['GameDate'] == '2018-12-29')
+#            ,'GameDate'] = '2018-12-28'
     
     # Merge together rsg_curr and rsg, then determine which rsg_curr games are missing
     rsg_curr = pd.merge(rsgc_curr
