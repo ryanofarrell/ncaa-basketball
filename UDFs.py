@@ -64,6 +64,50 @@ def createreplacecsv(csvtoreplace,dataframetowrite):
 ###############################################################################
 ###############################################################################
 
+###############################################################################
+# "CreateReplace xlsx" UDF
+# Inputs: exceltoreplace (the file to replace); replacementdataframe (numeric time to print)
+# Outputs: replaces the file at the location
+###############################################################################
+def createreplacexlsx(xlsxtoreplace,dataframetowrite):
+    # Assert cavtoreplace is a string and ends in xlsx
+    assert type(xlsxtoreplace) == str, 'First argument is not a string'
+    assert xlsxtoreplace[-5:] == '.xlsx', 'First argument is not a xlsx file'
+    
+    # Create new file string
+    import re
+    regex = '^(/(?:.+/)*)(.+)(.xlsx)'
+    currxlsxpath = re.match(regex,xlsxtoreplace).group(1)
+    currxlsxname = re.match(regex,xlsxtoreplace).group(2)
+    
+    from datetime import datetime
+    now = str(datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+    newxlsxpath = currxlsxpath + 'archive/'
+    newxlsxname = currxlsxname + '_ReplacedOn_' + now + '.xlsx'
+    
+    # Assert the archive path exists
+    import os
+    assert os.path.exists(newxlsxpath), "No 'archive' folder in the provided path"
+    
+    # Assert dataframetowrite is a dataframe
+    import pandas as pd
+    assert type(dataframetowrite) == pd.core.frame.DataFrame, 'Second argument is not a DataFrame'
+
+
+    print('\nWriting: ' + currxlsxname + '.xlsx...')
+
+    # Move current file to archive folder, rename file
+    try:
+        os.rename(xlsxtoreplace, newxlsxpath + newxlsxname)
+        print('Archived current ' + currxlsxname + '.xlsx into archive folder...')
+    except FileNotFoundError:
+        print('No file archived; no file named ' + currxlsxname + '.xlsx at given path')
+    
+    dataframetowrite.to_excel(currxlsxpath + currxlsxname + '.xlsx', index=False)
+    print('Success! Wrote dataframe to ' + currxlsxname + '.xlsx')
+###############################################################################
+###############################################################################
+
 
 ###############################################################################
 # "Title" UDF

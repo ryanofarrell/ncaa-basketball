@@ -8,8 +8,7 @@ Created on Fri Dec 21 11:03:20 2018
 
 
 import pandas as pd
-from UDFs import createreplacecsv
-# TODO morgan state vs howard wtf?
+from UDFs import createreplacexlsx
 
 seasonteams = pd.read_csv('/Users/Ryan/Google Drive/ncaa-basketball-data/seasonteams.csv')
 
@@ -57,9 +56,15 @@ del metric, prefix, suffix
 # Initial trim of crazy columns
 seasontable = seasonteams[inclcolumns]
 
+print(seasontable.dtypes)
+for column in inclcolumns:
+    if column[:4] == 'Rank':
+        seasontable[column].astype(int)
+#        seasontable[metric].to_numeric(errors = 'coerce')
+
 
 
 testst = seasontable.loc[seasontable['TmName'] == 'Florida']
 testst = seasontable.loc[seasontable['Season'] == 2019]
 
-createreplacecsv('/Users/Ryan/Google Drive/ncaa-basketball-data/seasontable.csv',seasontable)
+createreplacexlsx('/Users/Ryan/Google Drive/ncaa-basketball-data/seasontable.xlsx',seasontable)
