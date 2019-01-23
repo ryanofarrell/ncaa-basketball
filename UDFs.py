@@ -11,40 +11,44 @@ Created on Sat Dec  8 12:44:33 2018
 # Inputs: prefix (string to print); timetoprint (numeric time to print)
 # Outputs: Prints the prefix plus the timetoprint, in seconds or minutes
 ###############################################################################
-def printtime(prefix,timetoprint):
+
+
+def printtime(prefix, timetoprint):
     if timetoprint < 60:
-        print(prefix + str(round((timetoprint),3)) + ' sec')
+        print(prefix, str(round((timetoprint), 3)), ' sec')
     else:
-        print(prefix + str(round((timetoprint)/60,3)) + ' min')
+        print(prefix, str(round((timetoprint)/60, 3)), ' min')
 ###############################################################################
 ###############################################################################
 
 
 ###############################################################################
 # Create "Replace CSV" UDF
-# Inputs: csvtoreplace (the file to replace); replacementdataframe (numeric time to print)
-# Outputs: replaces the file at the location
+# Inputs: csvtoreplace; dataframetowrite
+# Outputs: replaces the file at the location, or creates it
 ###############################################################################
+
+
 def createreplacecsv(csvtoreplace,dataframetowrite):
     # Assert cavtoreplace is a string and ends in csv
     assert type(csvtoreplace) == str, 'First argument is not a string'
     assert csvtoreplace[-4:] == '.csv', 'First argument is not a csv file'
-    
+
     # Create new file string
     import re
     regex = '^(\/(?:.+\/)*)(.+)(.csv)'
     currcsvpath = re.match(regex,csvtoreplace).group(1)
     currcsvname = re.match(regex,csvtoreplace).group(2)
-    
+
     from datetime import datetime
     now = str(datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
     newcsvpath = currcsvpath + 'archive/'
     newcsvname = currcsvname + '_ReplacedOn_' + now + '.csv'
-    
+
     # Assert the archive path exists
     import os
     assert os.path.exists(newcsvpath), "No 'archive' folder in the provided path"
-    
+
     # Assert dataframetowrite is a dataframe
     import pandas as pd
     assert type(dataframetowrite) == pd.core.frame.DataFrame, 'Second argument is not a DataFrame'
@@ -58,7 +62,7 @@ def createreplacecsv(csvtoreplace,dataframetowrite):
         print('Archived current ' + currcsvname + '.csv into archive folder...')
     except FileNotFoundError:
         print('No file archived; no file named ' + currcsvname + '.csv at given path')
-    
+
     dataframetowrite.to_csv(currcsvpath + currcsvname + '.csv', index=False)
     print('Success! Wrote dataframe to ' + currcsvname + '.csv')
 ###############################################################################
@@ -73,22 +77,22 @@ def createreplacexlsx(xlsxtoreplace,dataframetowrite):
     # Assert cavtoreplace is a string and ends in xlsx
     assert type(xlsxtoreplace) == str, 'First argument is not a string'
     assert xlsxtoreplace[-5:] == '.xlsx', 'First argument is not a xlsx file'
-    
+
     # Create new file string
     import re
     regex = '^(/(?:.+/)*)(.+)(.xlsx)'
     currxlsxpath = re.match(regex,xlsxtoreplace).group(1)
     currxlsxname = re.match(regex,xlsxtoreplace).group(2)
-    
+
     from datetime import datetime
     now = str(datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
     newxlsxpath = currxlsxpath + 'archive/'
     newxlsxname = currxlsxname + '_ReplacedOn_' + now + '.xlsx'
-    
+
     # Assert the archive path exists
     import os
     assert os.path.exists(newxlsxpath), "No 'archive' folder in the provided path"
-    
+
     # Assert dataframetowrite is a dataframe
     import pandas as pd
     assert type(dataframetowrite) == pd.core.frame.DataFrame, 'Second argument is not a DataFrame'
@@ -102,7 +106,7 @@ def createreplacexlsx(xlsxtoreplace,dataframetowrite):
         print('Archived current ' + currxlsxname + '.xlsx into archive folder...')
     except FileNotFoundError:
         print('No file archived; no file named ' + currxlsxname + '.xlsx at given path')
-    
+
     dataframetowrite.to_excel(currxlsxpath + currxlsxname + '.xlsx', index=False)
     print('Success! Wrote dataframe to ' + currxlsxname + '.xlsx')
 ###############################################################################
@@ -133,15 +137,15 @@ def dfcoldiffs(df1, df2, spec = 'list'):
     assert type(df2) == pd.core.frame.DataFrame, 'Second input is not a DataFrame'
     assert type(spec) == str, 'Third argument is not a string'
     assert spec in ['count','list'], 'Must request either a count or a list'
-    
+
     df1_cols = sorted(list(df1))
     df2_cols = sorted(list(df2))
-    
+
     coldiffs = []
-    
+
     coldiffs = [['In first, not in second',sorted(list(set(df1_cols) - set(df2_cols)))]]
     coldiffs.append(['In second, not in first',sorted(list(set(df2_cols) - set(df1_cols)))])
-    
+
     if spec == 'list':
         return coldiffs
     elif spec == 'count':
@@ -157,12 +161,12 @@ from datetime import datetime
 class timer:
     def __init__(self):
         pass
-    
+
     def start(self):
         self.starttime = datetime.now()
         self.prevsplit = datetime.now()
         print('Timer started...')
-        
+
     def split(self,descr = 'Time since prev split: '):
         assert type(descr) == str, 'Please pass a string'
         self.now = datetime.now()
