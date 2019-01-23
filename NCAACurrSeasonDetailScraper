@@ -16,7 +16,7 @@ from UDFs import createreplacecsv, printtitle
 import numpy as np
 
 printtitle('Running current season scraper')
-path = '/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle/'
+path = '/Users/Ryan/Google Drive/ncaa-basketball-data/'
 
 # TODO try except when scrape is finalized
 
@@ -79,7 +79,7 @@ rsgc_curr['OppName'].replace(regex=True, inplace=True,
                              to_replace=r'@', value=r'')
 
 # Get the team IDs
-fp = path + 'TeamSpellings.csv'
+fp = path + '2018-kaggle/TeamSpellings.csv'
 teamspellings = pd.read_csv(filepath_or_buffer=fp, encoding="ISO-8859-1")
 del fp
 
@@ -144,10 +144,10 @@ else:
     wp = 'https://www.sports-reference.com/cbb/boxscores/index.cgi?'
     webpages = []
     for row in datestoscrape.iterrows():
-        webpages.append(wp,
-                        "month=", str(row[1]['Month']),
-                        "&day=", str(row[1]['Day']),
-                        "&year=", str(row[1]['Year']))
+        webpages.append(wp +
+                        "month=" + str(row[1]['Month']) +
+                        "&day=" + str(row[1]['Day']) +
+                        "&year=" + str(row[1]['Year']))
     del row, wp
 
     # On each of those day webpages, scrape the link to the game's results
@@ -494,3 +494,5 @@ else:
     createreplacecsv(path + 'rsgd_curr.csv', rsgd_curr)
     createreplacecsv(path + 'rsg_curr.csv', rsg_curr)
     createreplacecsv(path + 'rsgscrape_missingdetails.csv', missingdetails)
+
+    del path
