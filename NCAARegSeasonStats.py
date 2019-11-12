@@ -11,7 +11,12 @@ import datetime as datetime
 #from sklearn.ensemble import RandomForestRegressor
 #import numpy as np
 
+from db import get_db
+
+
+
 begin = time.time()
+
 
 ###############################################################################
 ###############################################################################
@@ -24,7 +29,7 @@ rsgd = pd.read_csv('/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle-up
 
 seasons = pd.read_csv(filepath_or_buffer = '/Users/Ryan/Desktop/DataFiles/Seasons.csv')
 teams = pd.read_csv(filepath_or_buffer = '/Users/Ryan/Desktop/DataFiles/Teams.csv')
-    
+
 # Merge in day 0 to rsgc & rsgd, add days to day 0 to get date of game, delete extra columns
 rsgc = pd.merge(rsgc,seasons[['Season','DayZero']],on='Season')
 rsgc['DayZero'] = pd.to_datetime(rsgc['DayZero'],format='%m/%d/%Y')
@@ -192,24 +197,24 @@ else:
 ###############################################################################
 def opponentadjust(OAmetric):
     global rsg, seasonteams
-    
+
     # Figure out the prefix, core metric, for use later
     if OAmetric[:2] == 'Tm':
         prefix = OAmetric[:2]
         otherprefix = 'Opp'
-        coremetric = OAmetric[2:]    
+        coremetric = OAmetric[2:]
     if OAmetric[:3] == 'Opp':
         prefix = OAmetric[:3]
         otherprefix = 'Tm'
         coremetric = OAmetric[3:]
     # print (coremetric + prefix)
-    
+
     # From iteams put average PF into opponent side of irsg
     # Example, Opp_AvgPF_Against, Opp_AvgPA_Against
     # If I am OAing TmPFper40 (my offense proficiency), I want to get OppPFper40 for my opponent
     # So, for a TmName, get their OppPFper40, aka their PAper40
     tempseasonteams = seasonteams[['TmName','Season',otherprefix+coremetric]]
-    
+
     # Rename my opponent's metric to say it's *their* average <insert metric>
     # Rename to OppAvg_OppScoreper40 (it's my opponent's average opponents (me) score per 40)
     tempseasonteams = tempseasonteams.rename(columns = {otherprefix+coremetric:'OppAvg_'+otherprefix+coremetric})
@@ -217,7 +222,7 @@ def opponentadjust(OAmetric):
     # Merge in this info into irsg, for the opponent in irsg
     rsg = pd.merge(rsg,tempseasonteams,left_on=['OppName','Season'],right_on=['TmName','Season'],how='left',suffixes=('','_y'))
     del rsg['TmName_y']
-    
+
     # In irsg, determine for that game how the Tm did vs Opp_Avg's
     # Example, GameOppAdj_TmPFper40 = TmPFper40 - OppAvg_OppPFper40
     rsg['GameOppAdj_'+OAmetric] = rsg[OAmetric] - rsg['OppAvg_'+otherprefix+coremetric]
@@ -225,7 +230,7 @@ def opponentadjust(OAmetric):
     # switch it for when you start with an opponent
     if prefix == 'Opp':
         rsg['GameOppAdj_'+OAmetric] = rsg['GameOppAdj_'+OAmetric] * -1
-    
+
     # In iteamstemp, sum the opponent-adjusted metric and get a new average
     # Example, sum(GameOppAdj_TmPFper40) gets you the TOTAL OA_PFper40
     seasonteamstemp = rsg.groupby(['TmName','Season'])['GameOppAdj_'+OAmetric].sum().reset_index()
@@ -247,7 +252,7 @@ for x in {'Opp','Tm'}:
     for column in ('FG','FG3','FG2','FT'):
         opponentadjust(x + column + 'Pct')
 del column, x
-    
+
 
 # Benchmark time
 prewritetime = time.time()-begin

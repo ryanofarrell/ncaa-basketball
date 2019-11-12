@@ -47,7 +47,7 @@ def opponentadjust(prefix, coremetric):
         st_workingseason['OA_' + prefix + coremetric + 'perGame'] = np.NaN
         st_workingseason['OA_' + prefix + coremetric + 'per40'] = np.NaN
         st_workingseason['OA_' + prefix + coremetric + 'perPoss'] = np.NaN
-#        print('Skipped: ' + str(workingseason) + ' - ' + prefix + coremetric)
+        #print('Skipped: ' + str(workingseason) + ' - ' + prefix + coremetric)
     # Otherwise, if there is data to use, opponentadjust
     else:
         # Into temo_st_currseason, get the team names, season, and
