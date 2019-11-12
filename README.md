@@ -1,7 +1,9 @@
 ## NCAA Basketball Data Analysis
 
 Maintained by: Ryan O'Farrell
+
 rofarrell.92@gmail.com
+
 https://www.linkedin.com/in/ryan-ofarrell/
 
 Maintaining some of my exploratory data anlysis of college basketball. 
