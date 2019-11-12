@@ -8,8 +8,8 @@ Created on Tue Oct 29 22:03:02 2019
 import pymongo
 import click
 from configparser import ConfigParser
-from flask import current_app, g
-from flask.cli import with_appcontext
+#from flask import current_app, g
+#from flask.cli import with_appcontext
 
 def config(section, filename='database.ini'):
     """Pulls the config status for the given section
