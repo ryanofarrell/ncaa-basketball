@@ -10,7 +10,25 @@ import altair as alt
 db = get_db()
 
 
+@st.cache
+def get_results_df(query,fields):
+    df = pd.DataFrame(list(db.seasonteams.find(query,fields)))
+    return df
+
+
+def tidy_results_df(df):
+    '''
+    1) Rounds all "perX" fields to 2 decimals
+    '''
+    for col in df.columns:
+        if col[-5:] == 'per40' or col[-7:] in ['perGame','perPoss']:
+            df = df.round({col:2})
+    return df
+
 selected_teams = stfn.sidebar_multiselect_team(db)
+if len(selected_teams) == 0:
+    st.error('Please select a team')
+    
 
 query = {'OppAst':{'$ne':np.nan},
         'TmName':{'$in':selected_teams}
@@ -24,8 +42,11 @@ fields = {'_id':0,
         'Season':1,
         'TmName':1}
 
-df = pd.DataFrame(list(db.seasonteams.find(query,fields)))
-st.write(df)
+
+
+df = get_results_df(query,fields)
+df = tidy_results_df(df)
+#st.write(df)
 
 # Create a selection that chooses the nearest point & selects based on x-value
 nearest = alt.selection(type='single', nearest=True, on='mouseover',
@@ -67,9 +88,13 @@ rules = alt.Chart(df).mark_rule(color='gray').encode(
 chart = alt.layer(
     line, selectors, points, rules, text
 ).properties(
-    height=600
+    height=800
 )
 
-st.altair_chart(chart)
+# Try/except for scenarios when there is no team selected
+try:
+    st.altair_chart(chart,width=0)
+except ValueError:
+    pass
 
 
