@@ -15,10 +15,9 @@ def return_teams_list(db = get_db()):
         teams_list.append(x['_id']['Team'])
     return teams_list
 
-
-def selectbox_seasons(db = get_db()):
+def return_seasons_list(db = get_db()):
     '''
-    Prompt user to select a season, setting variable 'season'
+    Returns a list of the seasons in seasonteams
     '''
     pipeline = [{'$group':{'_id':{'Season':'$Season'}}},
                 {'$sort':{'_id':-1}}
@@ -27,6 +26,14 @@ def selectbox_seasons(db = get_db()):
     seasons_list = []
     for x in results:
         seasons_list.append(x['_id']['Season'])
+    return seasons_list
+
+
+def selectbox_seasons(db = get_db()):
+    '''
+    Prompt user to select a season, setting variable 'season'
+    '''
+    seasons_list = return_seasons_list(db)
     season = st.selectbox('Select a season',seasons_list)
     return season
 
