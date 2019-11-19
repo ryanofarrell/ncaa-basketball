@@ -19,33 +19,64 @@ def get_results_df(query,fields):
 def tidy_results_df(df):
     '''
     1) Rounds all "perX" fields to 2 decimals
+    2) Change season from numeric to text
     '''
+
+    # 1) Round all 'per40' fields to 2 decimals
     for col in df.columns:
-        if col[-5:] == 'per40' or col[-7:] in ['perGame','perPoss']:
+        if col[-5:] == 'per40' or col[-7:] == 'perGame':
             df = df.round({col:2})
+        if col[-7:] == 'perPoss':
+            df = df.round({col:4})
+
+    # 2) Change seasons from numeric to text
+    try:
+        df['Season'] = df['Season'].apply(str)
+    except KeyError:
+        pass
     return df
 
 selected_teams = stfn.sidebar_multiselect_team(db)
 if len(selected_teams) == 0:
     st.error('Please select a team')
-    
 
-query = {'OppAst':{'$ne':np.nan},
-        'TmName':{'$in':selected_teams}
-        }
+metrics_list = ['PF', 'Margin',
+                'FGM', 'FGA',
+                'FG3M', 'FG3A',
+                'FG2M', 'FG2A',
+                'FTA', 'FTM',
+                'Ast', 'ORB',
+                'DRB', 'TRB',
+                'TO', 'Stl',
+                'Blk', 'Foul']
+
+prefix = st.sidebar.selectbox('Tm or Opp',['Tm','Opp'])
+
+metric = st.sidebar.selectbox('Select a metric',metrics_list)
+
+metric_appendix = st.sidebar.selectbox('Select a normalization',['per40','perPoss'])
+
+is_opponent_adjusted = st.sidebar.checkbox('Opponent-adjusted?')
+adjustment = 'OA_' if is_opponent_adjusted else ''
+
 fields = {'_id':0,
-        'TmMarginper40':1,
-        'OppPFper40':1,
-        'TmPFper40':1,
         'TmGame':1,
         'TmWin':1,
         'Season':1,
         'TmName':1}
 
+display_attr = adjustment + prefix + metric + metric_appendix
+fields[display_attr] = 1
+
+#st.write(fields)
+
+query = {'TmName':{'$in':selected_teams}}
+
 
 
 df = get_results_df(query,fields)
 df = tidy_results_df(df)
+df['TmWinPct'] = df['TmWin'] / df['TmGame']
 #st.write(df)
 
 # Create a selection that chooses the nearest point & selects based on x-value
@@ -54,7 +85,7 @@ nearest = alt.selection(type='single', nearest=True, on='mouseover',
 
 line = alt.Chart(df).mark_line().encode(
     x='Season',
-    y='TmMarginper40',
+    y=display_attr,
     color='TmName'
 )
 
@@ -74,7 +105,7 @@ points = line.mark_point().encode(
 
 # Draw text labels near the points, and highlight based on selection
 text = line.mark_text(align='left', dx=5, dy=-5).encode(
-    text=alt.condition(nearest, 'TmMarginper40', alt.value(' '))
+    text=alt.condition(nearest,display_attr, alt.value(' '))
 )
 
 # Draw a rule at the location of the selection
@@ -98,3 +129,25 @@ except ValueError:
     pass
 
 
+# Dist plot the teams' results
+'''
+chart2 = alt.Chart(df[['TmName','TmMarginper40']]).mark_area(
+    opacity=0.4,
+    interpolate='step'
+).encode(
+    alt.X('TmMarginper40:Q', bin=alt.Bin(step=3)),
+    alt.Y('count()', stack=None),
+    alt.Color('TmName')
+)
+
+
+#st.altair_chart(chart2)
+
+chart3 = alt.Chart(df).mark_line(opacity=0.7).encode(
+    x='Season',
+    y=alt.Y('TmWinPct'),
+    color='TmName',
+).add_selection(nearest)
+st.altair_chart(chart3)
+
+'''
