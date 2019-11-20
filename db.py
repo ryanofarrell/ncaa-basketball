@@ -6,10 +6,9 @@ Created on Tue Oct 29 22:03:02 2019
 @author: Ryan
 """
 import pymongo
-import click
+
 from configparser import ConfigParser
-#from flask import current_app, g
-#from flask.cli import with_appcontext
+
 
 def config(section, filename='database.ini'):
     """Pulls the config status for the given section
@@ -30,10 +29,11 @@ def config(section, filename='database.ini'):
         raise Exception('Section {0} not found in the {1} file'.format(section, filename))
     return p
 
+
 def get_db():
     """Opens database connection"""
     #
-    #if db is None:
+    # if db is None:
     params = config(section='MONGODB')
     client = pymongo.MongoClient("mongodb+srv://" + params['user'] + ":" + params['password'] + "@basketball-5hnb2.mongodb.net/test?retryWrites=true&w=majority")
     db = client[params['env']]
