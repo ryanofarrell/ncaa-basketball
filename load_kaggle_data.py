@@ -8,7 +8,7 @@ Created on Tue Oct 29 22:06:31 2019
 
 from db import get_db
 import pandas as pd
-from UDFs import createreplacecsv, printtitle, dfcoldiffs, timer
+from UDFs import printtitle, dfcoldiffs, timer
 
 printtitle('Running season calculations')
 
@@ -19,55 +19,11 @@ timer.start()
 seasonstoloop = list(range(1985, 2019))
 
 
-def calculate_possessions(reg_season_games):
-    '''Add field for number of possessions (BasketballReference Method) \n
-    https://www.basketball-reference.com/about/glossary.html
-    Returns the dataframe it is provided with two new fields: TmPoss and OppPoss
-    '''
-    reg_season_games['TmPoss'] = (
-            0.5 * ((reg_season_games['TmFGA']
-                    + 0.4 * reg_season_games['TmFTA']
-                    - 1.07 * (reg_season_games['TmORB'] /
-                              (reg_season_games['TmORB']
-                               + reg_season_games['OppDRB']))
-                    * (reg_season_games['TmFGA']
-                       - reg_season_games['TmFGM'])
-                    + reg_season_games['TmTO'])
-                   + (reg_season_games['OppFGA']
-                      + 0.4 * reg_season_games['OppFTA']
-                      - 1.07 * (reg_season_games['OppORB'] /
-                                (reg_season_games['OppORB']
-                                 + reg_season_games['TmDRB']))
-                      * (reg_season_games['OppFGA']
-                         - reg_season_games['OppFGM'])
-                      + reg_season_games['OppTO'])))
-
-    reg_season_games['OppPoss'] = (
-            0.5 * ((reg_season_games['OppFGA']
-                    + 0.4 * reg_season_games['OppFTA']
-                    - 1.07 * (reg_season_games['OppORB'] /
-                              (reg_season_games['OppORB']
-                               + reg_season_games['TmDRB']))
-                    * (reg_season_games['OppFGA']
-                       - reg_season_games['OppFGM'])
-                    + reg_season_games['OppTO'])
-                   + (reg_season_games['TmFGA']
-                      + 0.4 * reg_season_games['TmFTA']
-                      - 1.07 * (reg_season_games['TmORB'] /
-                                (reg_season_games['TmORB']
-                                 + reg_season_games['OppDRB']))
-                      * (reg_season_games['TmFGA']
-                         - reg_season_games['TmFGM'])
-                      + reg_season_games['TmTO']))
-    )
-    return reg_season_games
-
-
 def opponentadjust(prefix, metric, reg_season_games):
-    '''Returns a dataframe with:
+    """Returns a dataframe with:
     1) a record for each season-team combo in reg_season_games
-    2) a field 'OA_' + prefix + metric, which is the opponent-adjusted metric 
-    '''
+    2) a field 'OA_' + prefix + metric, which is the opponent-adjusted metric
+    """
 
     # Figure out the prefix
     assert prefix in ['Opp', 'Tm'], 'Must be Opp or Tm as the prefix'
@@ -227,102 +183,9 @@ rsg_out = pd.DataFrame()
 seasonteams_out = pd.DataFrame()
 
 
-def calculate_game_dates(reg_season_games, seasons):
-    '''Takes dataframe of regular season games and determines the game date
-    Uses day 0 from seasons and adds a timedelta
-    '''
-    reg_season_games = pd.merge(reg_season_games, seasons[['Season', 'DayZero']], on='Season')
-    reg_season_games['DayZero'] = pd.to_datetime(reg_season_games['DayZero'], format='%m/%d/%Y')
-    reg_season_games['DayNum'] = pd.to_timedelta(reg_season_games['DayNum'], unit='d')
-    reg_season_games['GameDate'] = reg_season_games['DayZero'] + reg_season_games['DayNum']
-    del reg_season_games['DayZero'], reg_season_games['DayNum']
-
-    print('Game Dates Calculated Successfully')
-    return reg_season_games
-
-
-def rename_and_duplicate_records(reg_season_games):
-    '''Takes dataframe and:
-    1) renames the columns to understood naming convention
-    2) duplicates the records, flips the winners/losers, and appends
-    This results in a dataframe that has a TmGame record for every game a team played,\
-    regardless if they won or lost.
-    '''
-    renamable_columns = {'GameDate': 'GameDate', 'NumOT': 'GameOT', 'WTeamID': 'TmID', 'WScore': 'TmPF',
-                         'WFGM': 'TmFGM', 'WFGA': 'TmFGA', 'WFGM2': 'TmFG2M', 'WFGA2': 'TmFG2A', 'WFGM3': 'TmFG3M',
-                         'WFGA3': 'TmFG3A', 'WFTM': 'TmFTM', 'WFTA': 'TmFTA', 'WOR': 'TmORB', 'WDR': 'TmDRB',
-                         'WTRB': 'TmTRB', 'WAst': 'TmAst', 'WStl': 'TmStl', 'WBlk': 'TmBlk', 'WTO': 'TmTO',
-                         'WPF': 'TmFoul', 'WLoc': 'TmLoc', 'LTeamID': 'OppID', 'LScore': 'OppPF', 'LFGM': 'OppFGM',
-                         'LFGA': 'OppFGA', 'LFGM2': 'OppFG2M', 'LFGA2': 'OppFG2A', 'LFGM3': 'OppFG3M',
-                         'LFGA3': 'OppFG3A', 'LFTM': 'OppFTM', 'LFTA': 'OppFTA', 'LOR': 'OppORB', 'LDR': 'OppDRB',
-                         'LTRB': 'OppTRB', 'LAst': 'OppAst', 'LStl': 'OppStl', 'LBlk': 'OppBlk', 'LTO': 'OppTO',
-                         'LPF': 'OppFoul', 'LLoc': 'OppLoc'}
-    reg_season_games = reg_season_games.rename(columns=renamable_columns)
-
-    # Copy, rename, and append the other half of the games to reg_season_games
-    loser_reg_season_games = reg_season_games.copy()
-    newnames = pd.DataFrame(list(loser_reg_season_games), columns=['OldName'])
-    newnames['NewName'] = newnames['OldName']
-    newnames.loc[newnames['OldName'].str[0:3] == 'Opp', 'NewName'] = 'Tm' + newnames['OldName'].str[3:]
-    newnames.loc[newnames['OldName'].str[0:2] == 'Tm', 'NewName'] = 'Opp' + newnames['OldName'].str[2:]
-    newnames = newnames.set_index('OldName')['NewName']
-    loser_reg_season_games = loser_reg_season_games.rename(columns=newnames)
-    loser_reg_season_games['TmLoc'] = 'N'
-    loser_reg_season_games.loc[loser_reg_season_games['OppLoc'] == 'H', 'TmLoc'] = 'A'
-    loser_reg_season_games.loc[loser_reg_season_games['OppLoc'] == 'A', 'TmLoc'] = 'H'
-    del loser_reg_season_games['OppLoc']
-    reg_season_games = reg_season_games.append(loser_reg_season_games, sort=True)
-    print(reg_season_games.columns)
-
-    return reg_season_games
-
-
-def read_and_clean_source_data():
-    reg_season_games_compact = pd.read_csv('data/Stage2DataFiles/RegularSeasonCompactResults.csv')
-    reg_season_games_detailed = pd.read_csv('data/Stage2DataFiles/RegularSeasonDetailedResults.csv')
-    seasons = pd.read_csv('data/Stage2DataFiles/Seasons.csv')
-    teams = pd.read_csv('data/Stage2DataFiles/Teams.csv')
-
-    # Merge compact and detailed results
-    reg_season_games_combined = pd.merge(
-        left=reg_season_games_compact,
-        right=reg_season_games_detailed,
-        on=list(reg_season_games_compact),
-        how='outer')
-
-    # Get game dates
-    reg_season_games_combined = calculate_game_dates(reg_season_games_combined, seasons)
-
-    reg_season_games_combined = rename_and_duplicate_records(reg_season_games_combined)
-
-    return reg_season_games_combined
-
-
-reg_season_games_combined = read_and_clean_source_data()
 print('here')
 
-# Copy, rename, and append the other half of the games to rsg_prev
-lrsg_prev = rsg_prev.copy()
-newnames = pd.DataFrame(list(lrsg_prev), columns=['OldName'])
-newnames['NewName'] = newnames['OldName']
-newnames.loc[newnames['OldName'].str[0:3] == 'Opp', 'NewName'] = 'Tm' + newnames['OldName'].str[3:]
-newnames.loc[newnames['OldName'].str[0:2] == 'Tm', 'NewName'] = 'Opp' + newnames['OldName'].str[2:]
-newnames = newnames.set_index('OldName')['NewName']
-lrsg_prev = lrsg_prev.rename(columns=newnames)
-lrsg_prev['TmLoc'] = 'N'
-lrsg_prev.loc[lrsg_prev['OppLoc'] == 'H', 'TmLoc'] = 'A'
-lrsg_prev.loc[lrsg_prev['OppLoc'] == 'A', 'TmLoc'] = 'H'
-del lrsg_prev['OppLoc']
-rsg_prev = rsg_prev.append(lrsg_prev, sort=True)
-del lrsg_prev, newnames
 
-# Handle column differences
-rsg_prev['TmFG2A'] = rsg_prev['TmFGA'] - rsg_prev['TmFG3A']
-rsg_prev['TmFG2M'] = rsg_prev['TmFGM'] - rsg_prev['TmFG3M']
-rsg_prev['OppFG2A'] = rsg_prev['OppFGA'] - rsg_prev['OppFG3A']
-rsg_prev['OppFG2M'] = rsg_prev['OppFGM'] - rsg_prev['OppFG3M']
-rsg_prev['TmTRB'] = rsg_prev['TmORB'] + rsg_prev['TmDRB']
-rsg_prev['OppTRB'] = rsg_prev['OppORB'] + rsg_prev['OppDRB']
 
 # TODO implement assert once previous data being loaded
 # assert dfcoldiffs(rsg_prev,rsg_curr,'count') == 0,'Columns different between rsg_out and rsg_tocalc'
@@ -367,48 +230,7 @@ print('\n' + str(missinggamesseasons) + ' seasons missing details...')
 del rsg_summary1, rsg_summary2, rsg_tocalc['DetailedGame']
 del missinggamesseasons
 
-###############################################################################
-# Round out game records
-###############################################################################
 
-# Bring in team names for both Tm and Opp
-rsg_tocalc = pd.merge(
-    rsg_tocalc, teams[['TeamID', 'TeamName']], left_on='TmID', right_on='TeamID')
-del rsg_tocalc['TeamID']
-rsg_tocalc = rsg_tocalc.rename(columns={'TeamName': 'TmName'})
-rsg_tocalc = pd.merge(
-    rsg_tocalc, teams[['TeamID', 'TeamName']], left_on='OppID', right_on='TeamID')
-del rsg_tocalc['TeamID']
-rsg_tocalc = rsg_tocalc.rename(columns={'TeamName': 'OppName'})
-
-# Add countable field for number of games
-rsg_tocalc['TmGame'] = 1
-rsg_tocalc['OppGame'] = 1
-
-# Add field for number of minutes
-rsg_tocalc['TmMins'] = 40 + rsg_tocalc['GameOT'] * 5
-rsg_tocalc['OppMins'] = rsg_tocalc['TmMins']
-
-# Calculate field goal percentages in each game
-rsg_tocalc['TmFGPct'] = rsg_tocalc['TmFGM'] / rsg_tocalc['TmFGA']
-rsg_tocalc['TmFG3Pct'] = rsg_tocalc['TmFG3M'] / rsg_tocalc['TmFG3A']
-rsg_tocalc['TmFG2Pct'] = rsg_tocalc['TmFG2M'] / rsg_tocalc['TmFG2A']
-rsg_tocalc['TmFTPct'] = rsg_tocalc['TmFTM'] / rsg_tocalc['TmFTA']
-rsg_tocalc['OppFGPct'] = rsg_tocalc['OppFGM'] / rsg_tocalc['OppFGA']
-rsg_tocalc['OppFG3Pct'] = rsg_tocalc['OppFG3M'] / rsg_tocalc['OppFG3A']
-rsg_tocalc['OppFG2Pct'] = rsg_tocalc['OppFG2M'] / rsg_tocalc['OppFG2A']
-rsg_tocalc['OppFTPct'] = rsg_tocalc['OppFTM'] / rsg_tocalc['OppFTA']
-
-# Calculate game margin
-rsg_tocalc['TmMargin'] = rsg_tocalc['TmPF'] - rsg_tocalc['OppPF']
-rsg_tocalc['OppMargin'] = -rsg_tocalc['TmMargin']
-
-# Calculate win columns
-rsg_tocalc['TmWin'] = 0
-rsg_tocalc.loc[rsg_tocalc['TmMargin'] > 0, 'TmWin'] = 1
-rsg_tocalc['OppWin'] = 1 - rsg_tocalc['TmWin']
-
-rsg_tocalc = calculate_possessions(rsg_tocalc)
 
 # Calculate per-40 and per-poss metrics for each game in rsg_tocalc
 for x in {'Opp', 'Tm'}:
@@ -417,15 +239,6 @@ for x in {'Opp', 'Tm'}:
         rsg_tocalc[x + column + 'perPoss'] = rsg_tocalc[x + column] / rsg_tocalc[x + 'Poss']
 del column, x
 
-# Create the rsg_out dataframe
-# TODO get opponent rank into output
-
-
-# TODO rank game percentiles, give A, B, C, D, F
-# # Rank Game Percentiles
-# rsgc['OffPercentile'] = 1 - (len(rsgc)-rankdata(rsgc['TeamOffScore'],method='min'))/len(rsgc)
-# rsgc['DefPercentile'] = 1 - (len(rsgc)-rankdata(rsgc['TeamDefScore'],method='min'))/len(rsgc)
-# rsgc['OAMPercentile'] = 1 - (len(rsgc)-rankdata(rsgc['TeamOAM'],method='min'))/len(rsgc)
 
 # TODO removed this assert when reviving in 2019...figure out what it does and if I need it
 '''
@@ -435,7 +248,6 @@ elif runall == False:
     assert dfcoldiffs(rsg_out,rsg_tocalc,'count') == 0,'Columns different between rsg_out and rsg_tocalc'
 '''
 
-rsg_out = rsg_out.append(rsg_tocalc, sort=True)
 
 timer.split('Pre-loop split: ')
 ###############################################################################
@@ -519,28 +331,6 @@ for workingseason in seasonstoloop:
                                             / st_workingseason['TmTO'])
         st_workingseason['OppAstTORatio'] = (st_workingseason['OppAst']
                                              / st_workingseason['OppTO'])
-    # 2019-11-04 Don't rank since we don't need to persist this
-    '''
-    # Rank all metrics
-    for metric in ascendingrankmetrics:
-        if detailedseason is False:
-            st_workingseason['Rank_' + metric] = 0
-        else:
-            st_workingseason['Rank_' + metric] = (
-                    st_workingseason[metric].rank(method='min',
-                                                  ascending=True,
-                                                  na_option='bottom'))
-    for metric in descendingrankmetrics:
-        if detailedseason is False:
-            st_workingseason['Rank_' + metric] = 0
-        else:
-            st_workingseason['Rank_' + metric] = (
-                    st_workingseason[metric].rank(method='min',
-                                                  ascending=False,
-                                                  na_option='bottom'))
-
-    del metric
-    '''
     # Append the working seasons output to the total seasonteams output
     seasonteams_out = seasonteams_out.append(st_workingseason)
 
