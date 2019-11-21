@@ -3,6 +3,7 @@ from db import get_db
 import pandas as pd
 from math import isnan
 
+
 def calculate_possessions(reg_season_games):
     """Add field for number of possessions (BasketballReference Method) \n
     https://www.basketball-reference.com/about/glossary.html
@@ -142,6 +143,8 @@ def addAdditionalGameColumns(rsg):
 
     rsg = calculate_possessions(rsg)
 
+    rsg = addVegasLineToKaggleData(rsg)
+
     return rsg
 
 
@@ -157,6 +160,25 @@ def addTeamNamesToKaggleData(rsg, teams):
     rsg = rsg.rename(columns={'TeamName': 'OppName'})
 
     return rsg
+
+
+def addVegasLineToKaggleData(rsg):
+    """Loads the vegas data from locally-sourced CSV
+    and cleans up column names/types, merges into provided dataframe
+
+    Returns:
+        Pandas DataFrame -- dataframe that was provided + the vegas data
+    """
+    df = pd.read_csv('/Users/Ryan/Google Drive/HistoricalNCAAData/VegasAnalysisFull.csv')
+    df = df[['Date', 'Team', 'Opponent', 'TeamLineVegas']]
+    df = df.rename(columns={'Team': 'TmName',
+                            'Opponent': 'OppName',
+                            'Date': 'GameDate',
+                            'TeamLineVegas': 'GameVegasLine'})
+    df['GameDate'] = pd.to_datetime(df['GameDate'])
+    rsg = pd.merge(rsg, df, how='left', on=['TmName', 'OppName', 'GameDate'])
+    return rsg
+
 
 
 def read_and_clean_source_data():
@@ -191,26 +213,27 @@ reg_season_games_combined = read_and_clean_source_data()
 
 reg_season_games_combined = addAdditionalGameColumns(reg_season_games_combined)
 
-db = get_db()
+
+# Split into detailed and not for memory saving in database
+null_rows = reg_season_games_combined.isnull().sum(axis=1) > 1
+null_data = reg_season_games_combined[null_rows]
+null_data = null_data.dropna(axis=1, thresh=len(null_data)-500)  # drop columns with <500 populated values ()
+detailed_data = reg_season_games_combined[-null_rows]
+assert len(null_data) + len(detailed_data) == len(reg_season_games_combined)
 
 # Read in data, convert to dict, insert records into collection
+db = get_db()
 print(f"Dropping games from MongoDB")
 db.games.drop()
 
-# Split into detailed and not for memory saving in database
-null_data = reg_season_games_combined[reg_season_games_combined.isnull().any(axis=1)]
-null_data = null_data.dropna(axis=1)
 print(f"Converting {len(null_data)} non-detailed records to dict")
 null_data_dict = null_data.to_dict('records')
 print(f"Inserting {len(null_data_dict)} records to database")
 db.games.insert_many(null_data_dict, ordered=False)
 print(f"Inserted {len(null_data_dict)} records.")
 
-detailed_data = reg_season_games_combined[-reg_season_games_combined.isnull().any(axis=1)]
 print(f"Converting {len(detailed_data)} detailed records to dict")
 detailed_data_dict = detailed_data.to_dict('records')
 print(f"Inserting {len(detailed_data_dict)} records to database")
 db.games.insert_many(detailed_data_dict, ordered=False)
 print(f"Inserted {len(detailed_data_dict)} records.")
-
-
