@@ -469,6 +469,10 @@ if __name__ == '__main__':
                                           on=columnsToMergeOn,
                                           how='left')
 
+        # Format gamedate as datetime
+        regSeasonGamesDetailed['GameDate'] = pd.to_datetime(
+            regSeasonGamesDetailed['GameDate'], format='%Y/%m/%d')
+
         # Note there are some discrepancies between Massey & SR
         # We will use Massey as the source or record but track diffs
         diffPointsAcrossSources = regSeasonGamesDetailed.loc[
