@@ -275,7 +275,9 @@ if __name__ == '__main__':
         reg_season_games_combined)
 
     # Split into detailed and not for memory saving in database
-    null_rows = reg_season_games_combined.isnull().sum(axis=1) > 1
+    # Find rows with >5 null values (prev was 1; some games have 0FTA
+    # which screws up FTPct)
+    null_rows = reg_season_games_combined.isnull().sum(axis=1) > 5
     null_data = reg_season_games_combined[null_rows]
     # drop columns with <500 populated values ()
     null_data = null_data.dropna(axis=1, thresh=len(null_data)-500)
@@ -286,6 +288,7 @@ if __name__ == '__main__':
     # Read in data, convert to dict, insert records into collection
     from db import get_db
     db = get_db()
+    # TODO look in to batch delete previous seasons vs entire drop
     print(f"Dropping games from MongoDB")
     db.games.drop()
 
