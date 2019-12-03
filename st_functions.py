@@ -1,74 +1,264 @@
 
 import streamlit as st
 from db import get_db
+import pandas as pd
 
-def return_teams_list(db = get_db()):
-    '''
-    Returns a list of the teams in seasonteams
-    '''
-    pipeline = [{'$group':{'_id':{'Team':'$TmName'}}},
-                {'$sort':{'_id':1}}
+
+
+# TODO switch back the allow_output_mutation=True once bug 
+#@st.cache
+def cacheGameData(q, f, _db):
+    returnedGames = pd.DataFrame(list(_db.games.find(q, f)))
+    return returnedGames
+
+
+def return_teams_list(_db):
+    """Get a list of all the teams with at least one game ever
+
+    Keyword Arguments:
+        _db {database connection} -- Connection to MongoDB
+
+    Returns:
+        List -- Every team with at least 1 game played ever
+    """
+    pipeline = [{'$group': {'_id': {'Team': '$TmName'}}},
+                {'$sort': {'_id': 1}}
                 ]
-    results = db.seasonteams.aggregate(pipeline)
+    results = _db.games.aggregate(pipeline)
     teams_list = []
     for x in results:
         teams_list.append(x['_id']['Team'])
     return teams_list
 
-def return_seasons_list(db = get_db()):
+
+def return_seasons_list(_db):
     '''
     Returns a list of the seasons in seasonteams
     '''
-    pipeline = [{'$group':{'_id':{'Season':'$Season'}}},
-                {'$sort':{'_id':-1}}
+    pipeline = [{'$group': {'_id': {'Season': '$Season'}}},
+                {'$sort': {'_id': -1}}
                 ]
-    results = db.seasonteams.aggregate(pipeline)
+    results = _db.games.aggregate(pipeline)
     seasons_list = []
     for x in results:
         seasons_list.append(x['_id']['Season'])
     return seasons_list
 
 
-def selectbox_seasons(db = get_db()):
+def selectbox_seasons(_db):
     '''
     Prompt user to select a season, setting variable 'season'
     '''
-    seasons_list = return_seasons_list(db)
-    season = st.selectbox('Select a season',seasons_list)
+    seasons_list = return_seasons_list(_db)
+    season = st.selectbox('Select a season', seasons_list)
     return season
 
-def slider_seasons(db = get_db()):
+
+def slider_seasons(_db):
     '''
     Prompt user to select a season, setting variable 'season'
     '''
-    pipeline = [{'$group':{'_id':{'Season':'$Season'}}},
-                {'$sort':{'_id':-1}}
-                ]
-    results = db.seasonteams.aggregate(pipeline)
-    seasons_list = []
-    for x in results:
-        seasons_list.append(x['_id']['Season'])
-    season = st.slider('Select a season',min_value = min(seasons_list),max_value = max(seasons_list))
+    seasons_list = return_seasons_list(_db)
+    season = st.slider('Select a season',
+                       min_value=min(seasons_list),
+                       max_value=max(seasons_list))
     return season
 
 
-def selectbox_team(db = get_db()):
+def selectbox_team(_db):
     '''
     Prompt user to select a single team
     '''
-    teams_list= return_teams_list(db)
-    team = st.selectbox('Select a team',teams_list)
+    teams_list = return_teams_list(_db)
+    team = st.selectbox('Select a team', teams_list)
     return team
 
-def sidebar_multiselect_team(db = get_db()):
+
+def sidebar_multiselect_team(_db):
     '''
     Add a multiselect team to the sidebar
     '''
-    teams_list = return_teams_list()
-    teams = st.sidebar.multiselect('Select a team or teams',tuple(teams_list))
+    teams_list = return_teams_list(_db)
+    teams = st.sidebar.multiselect('Select a team or teams', tuple(teams_list))
     return teams
 
 
-#selectbox_seasons()
-#selectbox_teams()
+def returnGamesForSeasonTeam(_db, teams=['Florida'], season=2020):
+    """Gets all the games for provided teams for a season
 
+    Keyword Arguments:
+        teams {list} -- List of team names to return games
+                        (default: {['Florida']})
+        season {int} -- Season in question (default: {2020})
+        db {database connection} -- Connection to MongoDB (default: {get_db()})
+
+    Returns:
+        DataFrame -- The games for the team in the given season,
+            sorted oldest --> newest
+    """
+    query = {'TmName': {'$in': teams},
+             'Season': season}
+    games_df = pd.DataFrame(list(db.games.find(query)))
+    games_df.sort_values(by=['GameDate'], inplace=True)
+    return games_df
+
+
+def opponentAdjustMetric(_db, team='Florida', prefix='Tm', metric='PF',
+                         suffix='perPoss',
+                         season=2020):
+
+    # Figure out the prefix
+    assert prefix in ['Opp', 'Tm'], 'Must be Opp or Tm as the prefix'
+    otherPrefix = 'Opp' if prefix == 'Tm' else 'Tm'
+
+    # Figure out the field to sum for denominator of team and opps
+    assert suffix in ['per40', 'perPoss', 'perGame'], 'Bad suffix'
+    denomField = 'Mins' if suffix == 'per40' else suffix[-4:]
+    normalizeConst = 40 if suffix == 'per40' else 1
+
+    # Get all of team's games into a list
+    tmGames = returnGamesForSeasonTeam([team],
+                                       season,
+                                       _db)[['OppName',
+                                            prefix+metric,
+                                            prefix+denomField]]
+    # st.write(tmGames)
+
+    # Aggregate the team's metric and denominator fields
+    tmAggMetric = tmGames[[prefix+metric, prefix+denomField]].sum()
+    # st.write(tmAggMetric)
+
+    st.write(f"{team}'s total {prefix+metric} in \
+        {tmAggMetric[prefix+denomField]} \
+        {denomField}: {tmAggMetric[prefix+metric]}")
+
+    tmAvgMetric = tmAggMetric[prefix+metric] / tmAggMetric[prefix+denomField] * normalizeConst
+    st.write(f"Thats {tmAvgMetric} {suffix}")
+
+    # Get all the opponents names into a list
+    oppNames = list(tmGames['OppName'])
+
+    # Get all the games the opponents played
+    oppGames = returnGamesForSeasonTeam(oppNames,
+                                        season,
+                                        _db)[[otherPrefix+metric,
+                                             'OppName',
+                                             otherPrefix+denomField,
+                                             'TmName']]
+    # st.write(oppGames)
+
+    # Drop the games that were against the team in question
+    oppGames = oppGames.loc[oppGames['OppName'] != team]
+
+    # For every opponent team plays more than 1 game against,
+    # append that opponent's games to oppGames prior to getting the average
+    # Example: Tm A plays Tm B twice
+    # Tm B's games should have 2 records each in OppGames
+    oppCnt = tmGames['OppName'].value_counts()
+    multOpponents = oppCnt.loc[oppCnt > 1]
+    # st.write(multOpponents)
+    for idx, val in multOpponents.iteritems():
+        gamesToAppend = oppGames.loc[oppGames['TmName'] == idx]
+        for x in range(1, val):
+            oppGames = oppGames.append(gamesToAppend)
+    # st.write(oppGames)
+
+    # Aggregate the opponents' metric and denominator fields
+    oppAggMetric = oppGames[[otherPrefix+metric, otherPrefix+denomField]].sum()
+    # st.write(oppAggMetric)
+
+    st.write(f"{team}'s opponents' total {otherPrefix+metric} in \
+        {oppAggMetric[otherPrefix+denomField]} non-{team} {denomField}: \
+        {oppAggMetric[otherPrefix+metric]}")
+
+    oppAvgMetric = oppAggMetric[otherPrefix+metric] / oppAggMetric[otherPrefix+denomField] * normalizeConst
+    st.write(f"Thats {oppAvgMetric} {suffix}")
+
+    oaMetric = (tmAvgMetric - oppAvgMetric)
+
+    return oaMetric
+
+
+
+def opponentAdjustMetricAllSeasons(_db, prefix='Tm', metric='Margin', suffix='per40', season = 2020):
+    # Figure out the prefix
+    assert prefix in ['Opp', 'Tm'], 'Must be Opp or Tm as the prefix'
+    otherPrefix = 'Opp' if prefix == 'Tm' else 'Tm'
+
+    # Figure out the field to sum for denominator of team and opps
+    assert suffix in ['per40', 'perPoss', 'perGame'], 'Bad suffix'
+    denomField = 'Mins' if suffix == 'per40' else suffix[-4:]
+    normalizeConst = 40 if suffix == 'per40' else 1
+
+    # Return all games for all seasons
+    print('here')
+    # TODO figure out how to make all seasons query faster
+    query = {'Season': season}
+    fields = {'TmName': 1,
+              'Season': 1,
+              'OppName': 1,
+              prefix+metric: 1,
+              prefix+denomField: 1,
+              otherPrefix+metric: 1,
+              otherPrefix+denomField: 1}
+    allGames = cacheGameData(query, fields, _db)
+    print('here2')
+    st.write(allGames)
+    print('here3')
+    # Aggregate the season's values for each team, for both metric and denominator
+    seasonAggMetric = allGames.groupby(['TmName', 'Season'])[prefix+metric,prefix+denomField,otherPrefix+metric,otherPrefix+denomField].sum()
+    seasonAggMetric[prefix+metric+suffix] = seasonAggMetric[prefix+metric] / seasonAggMetric[prefix+denomField] * normalizeConst
+    #st.write(seasonAggMetric, 'Above is each teams aggregated stats for the season')
+    
+    # Rename for merging, only bring un-aggregated fields
+    #mergeToGames = allGames.groupby(['TmName', 'Season'])[otherPrefix+metric, otherPrefix+denomField].sum()
+    mergeToGames = seasonAggMetric[[otherPrefix+metric,otherPrefix+denomField]].rename(columns={otherPrefix+metric: 'OppTotal_'+otherPrefix+metric, otherPrefix+denomField: 'OppTotal_'+otherPrefix+denomField})
+    #mergeToGames = mergeToGames[['OppTotal_'+prefix+metric, 'OppTotal_'+prefix+denomField]]
+    #st.write(mergeToGames,"above is the aggregated metrics, renamed for merging back into games")
+
+    allGames = pd.merge(allGames, mergeToGames, left_on=['OppName', 'Season'], right_on=['TmName', 'Season'])
+    # st.write(allGames)
+
+    # Remove the individual game's values from the opponent's aggregated metrics
+    # TODO what happens if I have 2 games I only remove one game's from the unaggregated version
+    # Could look into a groupby for tm and opp and subtract those via merge
+    # Other side: excluding this game, I am considered an 'average opponent'?
+
+    allGames['OppTotal_'+otherPrefix+metric+'_Adjusted'] = allGames['OppTotal_'+otherPrefix+metric] - allGames[prefix+metric]
+    allGames['OppTotal_'+otherPrefix+denomField+'_Adjusted'] = allGames['OppTotal_'+otherPrefix+denomField] - allGames[prefix+denomField]
+    #st.write(allGames)
+
+    seasonAggOppMetric = allGames.groupby(['TmName', 'Season'])['OppTotal_'+otherPrefix+metric+'_Adjusted', 'OppTotal_'+otherPrefix+denomField+'_Adjusted'].sum()
+    seasonAggOppMetric['Opp_'+otherPrefix+metric+suffix] = seasonAggOppMetric['OppTotal_'+otherPrefix+metric+'_Adjusted']/seasonAggOppMetric['OppTotal_'+otherPrefix+denomField+'_Adjusted']*normalizeConst
+    #st.write(seasonAggOppMetric,'Above is season aggregated otherprefix + metric')
+
+    seasonAggMetric = pd.merge(seasonAggMetric,seasonAggOppMetric,on=['TmName','Season'])
+    #st.write(seasonAggMetric)
+
+    # TODO determine to add or subtract
+    seasonAggMetric['OA_'+prefix+metric+suffix] = seasonAggMetric[prefix+metric+suffix] - seasonAggMetric['Opp_'+otherPrefix+metric+suffix]
+    st.write(seasonAggMetric)
+
+if __name__ == "__main__":
+    db = get_db()
+    season = selectbox_seasons(db)
+    prefix = st.sidebar.selectbox('Tm or Opp',['Tm','Opp'])
+    metrics_list = ['PF', 'Margin',
+                'FGM', 'FGA',
+                'FG3M', 'FG3A',
+                'FG2M', 'FG2A',
+                'FTA', 'FTM',
+                'Ast', 'ORB',
+                'DRB', 'TRB',
+                'TO', 'Stl',
+                'Blk', 'Foul',
+                'Poss']
+
+    metric = st.sidebar.selectbox('Select a metric',metrics_list)
+    suffix = st.sidebar.selectbox('Select a normalization',['per40','perPoss','perGame'])
+
+    opponentAdjustMetricAllSeasons(db, prefix, metric, suffix, season)
+
+    # test = opponentAdjustMetric(team=team, season=season, metric=metric,
+    #                             suffix=suffix, prefix=prefix, db=db)
+    # st.write(f"OA_{prefix+metric+suffix}: {test}")
