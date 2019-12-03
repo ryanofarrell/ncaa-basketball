@@ -441,6 +441,21 @@ def insertNewGameRecords(df):
     print(f"Inserted {len(data_dict)} records.")
 
 
+def dataQualityAdjustments(compactData, detailedData):
+    # Adjust Hawaii-San Francisco from 11/29/19 to 11/30/19
+    # Hawaii = 1218, San Fran = 1362
+    detailedData.loc[
+        (detailedData['TmID'] == 1218) &
+        (detailedData['OppID'] == 1362) &
+        (detailedData['GameDate'] == '2019-11-29'), 'GameDate'] = '2019-11-30'
+    detailedData.loc[
+        (detailedData['TmID'] == 1362) &
+        (detailedData['OppID'] == 1218) &
+        (detailedData['GameDate'] == '2019-11-29'), 'GameDate'] = '2019-11-30'
+
+    return compactData, detailedData
+
+
 if __name__ == '__main__':
     # Massey URL only takes D1-D1 games
     MASSEYURL = 'https://www.masseyratings.com/scores.php?s=309912&sub=11590&all=1&mode=2&format=0'
@@ -463,6 +478,10 @@ if __name__ == '__main__':
                                               compactResultsUniqueDates)
 
         columnsToMergeOn = ['TmID', 'OppID', 'GameDate']
+
+        # Handle date mismatches (usually for games in Hawaii)
+        df, df2 = dataQualityAdjustments(df, df2)
+
         # Merge left to use Massey as the ultimate source for data, with
         # SportsRef to augment with details.
         # Note that df only contains the games missing details
