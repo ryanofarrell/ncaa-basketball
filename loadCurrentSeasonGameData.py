@@ -112,6 +112,9 @@ def getNewGames(compactResults, currseason):
     dbResults = pd.DataFrame(list(db.games.find(query)))
 
     if len(dbResults) > 0:
+        # Convert datetime objects to strings for parsing into URL
+        dbResults['GameDate'] = dbResults[
+            'GameDate'].dt.strftime('%Y-%m-%d')
 
         comparedResults = pd.merge(compactResults, dbResults,
                                    how='left',
