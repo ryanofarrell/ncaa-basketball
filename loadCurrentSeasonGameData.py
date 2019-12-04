@@ -425,19 +425,22 @@ def addTmIDAndOppID(data):
     return data
 
 
-def insertNewGameRecords(df):
+def insertNewGameRecords(df, _db):
     """Adds new game records to database
 
     Arguments:
         df {DataFrame} -- Records to be added
+        _db {Database Connection} -- DB conn
 
     Prints when results are added.
     """
+    # TODO either genericise this to insert into different collections
+    # or remove it
+    # Main benefit is the printing of results - we can do better
     print(f"Converting {len(df)} new records to dict")
     data_dict = df.to_dict('records')
-    db = get_db()
     print(f"Inserting {len(data_dict)} records to database")
-    db.games.insert_many(data_dict, ordered=False)
+    _db.games.insert_many(data_dict, ordered=False)
     print(f"Inserted {len(data_dict)} records.")
 
 
@@ -516,6 +519,8 @@ if __name__ == '__main__':
             regSeasonGamesDetailed['TmAst'].isnull()]
         countMissingDetails = len(gamesMissingDetails)
         assert countMissingDetails == 0, 'Some new games missing details'
+        db = get_db()
+        insertNewGameRecords(regSeasonGamesDetailed, _db=db)
 
         insertNewGameRecords(regSeasonGamesDetailed)
     else:  # If there are no new games since this was last run
