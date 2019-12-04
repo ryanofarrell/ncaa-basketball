@@ -7,6 +7,7 @@ import re
 from loadRegularSeasonGameData import *
 from db import get_db
 import math
+from preAggregateSeasonTeams import preAggregateSeason
 
 # TODO get current season game lines
 # TODO optimize database connections
@@ -522,6 +523,28 @@ if __name__ == '__main__':
         db = get_db()
         insertNewGameRecords(regSeasonGamesDetailed, _db=db)
 
-        insertNewGameRecords(regSeasonGamesDetailed)
+        # Drop current season's pre-aggregated records
+        results = db.seasonteams.find({"Season": CURRENTSEASON}, {'_id': 1})
+        idsToDelete = []
+        for itm in results:
+            idsToDelete.append(itm['_id'])
+        if len(idsToDelete) == 0:
+            print(f"No season-teams records to delete")
+        else:
+            resp = db.seasonteams.delete_many({'_id': {'$in': idsToDelete}})
+            assert resp.deleted_count == len(idsToDelete), \
+                'Count mismatch on delete'
+            print(f"Successfully deleted {len(idsToDelete)} pre-agg records")
+
+        # Insert new records for current season preaggregation
+        # TODO change this from DB pull to use regSeasonGamesDetailed
+        # (unnecessary IO to DB)
+        df = preAggregateSeason(_db=db, season=CURRENTSEASON)
+        dataDict = df.to_dict('records')
+        resp = db.seasonteams.insert_many(dataDict, ordered=False)
+        assert len(resp.inserted_ids) == len(dataDict), \
+            'Count mismatch on insert'
+        print(f"Successfully inserted {len(dataDict)} pre-agg records")
+
     else:  # If there are no new games since this was last run
         print("No new records!")
