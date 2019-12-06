@@ -7,7 +7,7 @@ import re
 from loadRegularSeasonGameData import *
 from db import get_db
 import math
-from preAggregateSeasonTeams import preAggregateSeason
+from preAggregateSeasonTeams import pre_aggregate_season
 
 # TODO get current season game lines
 # TODO optimize database connections
@@ -539,7 +539,7 @@ if __name__ == '__main__':
         # Insert new records for current season preaggregation
         # TODO change this from DB pull to use regSeasonGamesDetailed
         # (unnecessary IO to DB)
-        df = preAggregateSeason(_db=db, season=CURRENTSEASON)
+        df = pre_aggregate_season(_db=db, szn=CURRENTSEASON)
         dataDict = df.to_dict('records')
         resp = db.seasonteams.insert_many(dataDict, ordered=False)
         assert len(resp.inserted_ids) == len(dataDict), \
