@@ -30,11 +30,11 @@ def config(section, filename='database.ini'):
     return p
 
 
-def get_db():
+def get_db(config_file_name='database.ini'):
     """Opens database connection"""
     #
     # if db is None:
-    params = config(section='MONGODB')
+    params = config(section='MONGODB', filename=config_file_name)
     client = pymongo.MongoClient("mongodb+srv://" + params['user'] + ":" + params['password'] + "@basketball-5hnb2.mongodb.net/test?retryWrites=true&w=majority")
     db = client[params['env']]
     print('Connected to database: {}'.format(params['env']))
