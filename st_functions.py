@@ -138,6 +138,22 @@ def opponentAdjustMetric(_db, team='Florida', prefix='Tm', metric='PF',
     return oaMetric
 
 
+def is_ascending_rank(pref, metr):
+    # More is better: Tm * Positive metric = 1 (descending)
+    # More is better: Opp * Negative metric = 1 (descending)
+    # Less is better: Tm * Negative metric = -1 (ascending)
+    # Less is Better: Opp * Positive metric = -1 (ascending)
+
+    # Opp = -1, Negative = -1, Tm = 1, Pos = 1
+
+    neg_metrics = ['Foul', 'TO']
+    metric_val = -1 if metr in neg_metrics else 1
+    prefix_val = -1 if pref == 'Opp' else 1
+
+    result = True if metric_val*prefix_val == -1 else False
+
+    return result
+
 
 def opponentAdjustMetricAllSeasons(_db, prefix='Tm', metric='Margin', suffix='per40', season = 2020):
     # Figure out the prefix
