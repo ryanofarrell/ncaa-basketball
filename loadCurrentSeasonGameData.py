@@ -183,7 +183,8 @@ def scrapeCurrSeasonDetailedResults(webpage, datesToScrape):
             pass
     links = pd.DataFrame(links, columns=['RawStr'])
     links['GameLink'] = 'https://www.sports-reference.com' + (
-                        links['RawStr'].str.extract(r'"(.*)"', expand=True))
+        links['RawStr'].str.extract(r'"(.*)"', expand=True)
+    )
     del links['RawStr'], webpage, gamenum, games
 
     # Init dataframes
