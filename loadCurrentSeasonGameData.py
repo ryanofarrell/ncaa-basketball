@@ -457,6 +457,17 @@ def dataQualityAdjustments(compactData, detailedData):
         (detailedData['OppID'] == 1218) &
         (detailedData['GameDate'] == '2019-11-29'), 'GameDate'] = '2019-11-30'
 
+    # Adjust Wash St. - Idaho from 12/4/19 to 12/5/19
+    # Wash St. = 1450, Idaho = 1225
+    detailedData.loc[
+        (detailedData['TmID'] == 1450) &
+        (detailedData['OppID'] == 1225) &
+        (detailedData['GameDate'] == '2019-12-04'), 'GameDate'] = '2019-12-05'
+    detailedData.loc[
+        (detailedData['TmID'] == 1225) &
+        (detailedData['OppID'] == 1450) &
+        (detailedData['GameDate'] == '2019-12-04'), 'GameDate'] = '2019-12-05'
+
     return compactData, detailedData
 
 
@@ -483,7 +494,7 @@ if __name__ == '__main__':
 
         columnsToMergeOn = ['TmID', 'OppID', 'GameDate']
 
-        # Handle date mismatches (usually for games in Hawaii)
+        # Handle data quality mismatches
         df, df2 = dataQualityAdjustments(df, df2)
 
         # Merge left to use Massey as the ultimate source for data, with
