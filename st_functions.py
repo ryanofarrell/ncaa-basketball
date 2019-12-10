@@ -1,18 +1,15 @@
 
-import streamlit as st
-from db import get_db
 import pandas as pd
-
 
 
 # TODO switch back the allow_output_mutation=True once bug 
 #@st.cache
-def cacheGameData(q, f, _db):
-    returnedGames = pd.DataFrame(list(_db.games.find(q, f)))
-    return returnedGames
+def cache_game_data(q, f, _db):
+    returned_games = pd.DataFrame(list(_db.games.find(q, f)))
+    return returned_games
 
 
-def return_teams_list(_db):
+def get_teams_list(_db):
     """Get a list of all the teams with at least one game ever
 
     Keyword Arguments:
@@ -26,12 +23,12 @@ def return_teams_list(_db):
                 ]
     results = _db.games.aggregate(pipeline)
     teams_list = []
-    for x in results:
-        teams_list.append(x['_id']['Team'])
+    for itm in results:
+        teams_list.append(itm['_id']['Team'])
     return teams_list
 
 
-def return_seasons_list(_db):
+def get_seasons_list(_db):
     '''
     Returns a list of the seasons in seasonteams
     '''
@@ -40,47 +37,9 @@ def return_seasons_list(_db):
                 ]
     results = _db.games.aggregate(pipeline)
     seasons_list = []
-    for x in results:
-        seasons_list.append(x['_id']['Season'])
+    for itm in results:
+        seasons_list.append(itm['_id']['Season'])
     return seasons_list
-
-
-def selectbox_seasons(_db):
-    '''
-    Prompt user to select a season, setting variable 'season'
-    '''
-    seasons_list = return_seasons_list(_db)
-    season = st.selectbox('Select a season', seasons_list)
-    return season
-
-
-def slider_seasons(_db):
-    '''
-    Prompt user to select a season, setting variable 'season'
-    '''
-    seasons_list = return_seasons_list(_db)
-    season = st.slider('Select a season',
-                       min_value=min(seasons_list),
-                       max_value=max(seasons_list))
-    return season
-
-
-def selectbox_team(_db):
-    '''
-    Prompt user to select a single team
-    '''
-    teams_list = return_teams_list(_db)
-    team = st.selectbox('Select a team', teams_list)
-    return team
-
-
-def sidebar_multiselect_team(_db):
-    '''
-    Add a multiselect team to the sidebar
-    '''
-    teams_list = return_teams_list(_db)
-    teams = st.sidebar.multiselect('Select a team or teams', tuple(teams_list))
-    return teams
 
 
 def returnGamesForSeasonTeam(_db, teams=['Florida'], season=2020):
@@ -201,9 +160,10 @@ def opponentAdjustMetricAllSeasons(_db, prefix='Tm', metric='Margin', suffix='pe
               prefix+denomField: 1,
               otherPrefix+metric: 1,
               otherPrefix+denomField: 1}
-    allGames = cacheGameData(query, fields, _db)
+    allGames = db.games.find(query, fields)
+    allGames = pd.DataFrame(list(allGames))
     print('here2')
-    st.write(allGames)
+    #st.write(allGames)
     print('here3')
     # Aggregate the season's values for each team, for both metric and denominator
     seasonAggMetric = allGames.groupby(['TmName', 'Season'])[prefix+metric,prefix+denomField,otherPrefix+metric,otherPrefix+denomField].sum()
@@ -232,33 +192,13 @@ def opponentAdjustMetricAllSeasons(_db, prefix='Tm', metric='Margin', suffix='pe
     seasonAggOppMetric['Opp_'+otherPrefix+metric+suffix] = seasonAggOppMetric['OppTotal_'+otherPrefix+metric+'_Adjusted']/seasonAggOppMetric['OppTotal_'+otherPrefix+denomField+'_Adjusted']*normalizeConst
     #st.write(seasonAggOppMetric,'Above is season aggregated otherprefix + metric')
 
-    seasonAggMetric = pd.merge(seasonAggMetric,seasonAggOppMetric,on=['TmName','Season'])
+    seasonAggMetric = pd.merge(seasonAggMetric,seasonAggOppMetric,on=['TmName','Season']).reset_index()
     #st.write(seasonAggMetric)
 
     # TODO determine to add or subtract
     seasonAggMetric['OA_'+prefix+metric+suffix] = seasonAggMetric[prefix+metric+suffix] - seasonAggMetric['Opp_'+otherPrefix+metric+suffix]
-    st.write(seasonAggMetric)
+    #st.write(seasonAggMetric)
+    return seasonAggMetric
 
 if __name__ == "__main__":
-    db = get_db()
-    season = selectbox_seasons(db)
-    prefix = st.sidebar.selectbox('Tm or Opp',['Tm','Opp'])
-    metrics_list = ['PF', 'Margin',
-                'FGM', 'FGA',
-                'FG3M', 'FG3A',
-                'FG2M', 'FG2A',
-                'FTA', 'FTM',
-                'Ast', 'ORB',
-                'DRB', 'TRB',
-                'TO', 'Stl',
-                'Blk', 'Foul',
-                'Poss']
-
-    metric = st.sidebar.selectbox('Select a metric',metrics_list)
-    suffix = st.sidebar.selectbox('Select a normalization',['per40','perPoss','perGame'])
-
-    opponentAdjustMetricAllSeasons(db, prefix, metric, suffix, season)
-
-    # test = opponentAdjustMetric(team=team, season=season, metric=metric,
-    #                             suffix=suffix, prefix=prefix, db=db)
-    # st.write(f"OA_{prefix+metric+suffix}: {test}")
+    pass
