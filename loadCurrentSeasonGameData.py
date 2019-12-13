@@ -180,7 +180,7 @@ def scrapeCurrSeasonDetailedResults(webpage, datesToScrape):
                 links.append(str(currgamelink))
         except:  # TODO remove bare except
             print('Skipped ' + link)
-            pass
+
     links = pd.DataFrame(links, columns=['RawStr'])
     links['GameLink'] = 'https://www.sports-reference.com' + (
         links['RawStr'].str.extract(r'"(.*)"', expand=True)
