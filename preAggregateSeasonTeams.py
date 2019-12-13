@@ -5,8 +5,13 @@ from db import get_db
 from st_functions import get_seasons_list
 
 
-def pre_aggregate_season(_db, szn):
-    season_games = pd.DataFrame(list(_db.games.find({'Season': szn})))
+def pre_aggregate_season(_db, szn, how='db', df=''):
+    assert how in ['db', 'df'], "Incorrect 'how'"
+    if how == 'db':
+        season_games = pd.DataFrame(list(_db.games.find({'Season': szn})))
+    else:
+        assert isinstance(df, pd.DataFrame)
+        season_games = df
     cols = list(season_games.columns)
 
     # Get list of columns to aggregate
