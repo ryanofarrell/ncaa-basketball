@@ -121,7 +121,9 @@ def getNewGames(compactResults, currseason):
                                    how='left',
                                    on=list(compactResults.columns))
 
-        rowsMissingData = comparedResults[comparedResults.isnull().any(axis=1)]
+        # Select the rows with > 4 missing pieces of data
+        # Added since some teams have no FT, which was caught in a 'any' search
+        rowsMissingData = comparedResults[comparedResults.isnull().sum(axis=1) > 4]
         # TODO add functionality for when there already is a record that is
         # missing data
         # For now, break here if there is anything in the _id column
