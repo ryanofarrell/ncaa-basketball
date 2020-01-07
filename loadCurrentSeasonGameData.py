@@ -151,28 +151,23 @@ def scrapeCurrSeasonDetailedResults(webpage, datesToScrape):
     Returns:
         DataFrame -- Detailed results of EVERY game on the dates provided
     """
-    # Get distinct dates from scraped
-    datesToScrape['Year'] = datesToScrape['Date'].str[0:4].astype(int)
-    datesToScrape['Month'] = datesToScrape['Date'].str[5:7].astype(int)
-    datesToScrape['Day'] = datesToScrape['Date'].str[8:].astype(int)
-    # print(datesToScrape)
 
-    # Create list of webpages to scrape from later
-    webpages = []
-    for row in datesToScrape.iterrows():
-        webpages.append(webpage +
-                        "month=" + str(row[1]['Month']) +
-                        "&day=" + str(row[1]['Day']) +
-                        "&year=" + str(row[1]['Year']))
-    del row
-    # print(webpages)
+    year = datesToScrape['Date'][0:4]
+    month = datesToScrape['Date'][5:7]
+    day = datesToScrape['Date'][8:]
 
-    # On each of those day webpages, scrape the link to the game's results
+    # Create link to scrape all the day's results from
+    dayResultsLink = str(
+        webpage +
+        "month=" + month +
+        "&day=" + day +
+        "&year=" + year
+    )
+
+    # Scrape the links to the game's results
     links = []
-    for link in webpages:
-        print('Working on ' + link)
-        try:
-            response = get(link)
+    print('Working on ' + dayResultsLink)
+    response = get(dayResultsLink)
             html_soup = BeautifulSoup(response.text, 'html.parser')
             games = html_soup.find_all('div', class_='game_summary nohover')
             for gamenum in range(0, len(games)):
@@ -180,8 +175,8 @@ def scrapeCurrSeasonDetailedResults(webpage, datesToScrape):
                 currgamelink = currgame.find('td', class_='right gamelink')
                 currgamelink = currgamelink.a
                 links.append(str(currgamelink))
-        except:  # TODO remove bare except
-            print('Skipped ' + link)
+    print(f"Found {len(links)} games")
+
 
     links = pd.DataFrame(links, columns=['RawStr'])
     links['GameLink'] = 'https://www.sports-reference.com' + (
@@ -488,12 +483,18 @@ if __name__ == '__main__':
 
     if len(df) > 0:
         # Get the dates missing details
-        compactResultsUniqueDates = pd.DataFrame(df['GameDate'].unique(),
-                                                 columns=['Date'])
+        compactResultsUniqueDates = pd.DataFrame(
+            df['GameDate'].unique(),
+            columns=['Date']
+        ).reset_index()
+
+        # Loop through each date individually rather than one big batch for debugging purposes
+        for idx, row in compactResultsUniqueDates.iterrows():
+            print(f"Working on Day: {row['Date']}")
 
         # Scrape ALL the games for the dates where games are missing details
         df2 = scrapeCurrSeasonDetailedResults(SPORTSREFURL,
-                                              compactResultsUniqueDates)
+                                                row)
 
         columnsToMergeOn = ['TmID', 'OppID', 'GameDate']
 
