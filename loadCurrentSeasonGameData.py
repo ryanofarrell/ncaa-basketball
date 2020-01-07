@@ -168,13 +168,13 @@ def scrapeCurrSeasonDetailedResults(webpage, datesToScrape):
     links = []
     print('Working on ' + dayResultsLink)
     response = get(dayResultsLink)
-            html_soup = BeautifulSoup(response.text, 'html.parser')
-            games = html_soup.find_all('div', class_='game_summary nohover')
-            for gamenum in range(0, len(games)):
-                currgame = games[gamenum]
-                currgamelink = currgame.find('td', class_='right gamelink')
-                currgamelink = currgamelink.a
-                links.append(str(currgamelink))
+    html_soup = BeautifulSoup(response.text, 'html.parser')
+    games = html_soup.find_all('div', class_='game_summary nohover')
+    for gamenum in range(0, len(games)):
+        currgame = games[gamenum]
+        currgamelink = currgame.find('td', class_='right gamelink')
+        currgamelink = currgamelink.a
+        links.append(str(currgamelink))
     print(f"Found {len(links)} games")
 
 
@@ -230,139 +230,143 @@ def scrapeCurrSeasonDetailedResults(webpage, datesToScrape):
 
     # Loop through all game links
     for currgamelink in links['GameLink']:
-        try:
-            GameDate = currgamelink[47:57]
-            print('Working on ', str(n), ' of ', str(len(links)),
-                  ' - ', currgamelink[47:])
-            response = get(currgamelink)
-            html_soup = BeautifulSoup(response.text, 'html.parser')
-            boxes = html_soup.find_all('div',
-                                       id=re.compile(r'all_box-score-basic'))
-            assert len(boxes) == 2, 'Can not find two boxes at' + currgamelink
+        linkstoskip = [
+            #'https://www.sports-reference.com/cbb/boxscores/2019-12-29-15-southern-illinois-edwardsville.html'
+        ]
+        if currgamelink not in linkstoskip:
+            try:
+                GameDate = currgamelink[47:57]
+                print('Working on ', str(n), ' of ', str(len(links)),
+                    ' - ', currgamelink[47:])
+                response = get(currgamelink)
+                html_soup = BeautifulSoup(response.text, 'html.parser')
+                boxes = html_soup.find_all('div',
+                                        id=re.compile(r'all_box-score-basic'))
+                assert len(boxes) == 2, 'Can not find two boxes at' + currgamelink
 
-            # Get Tm records into variables
-            Tmfooter = boxes[0].tfoot
-            TmName = str(boxes[0].h2.text)
-            TmPF = int(Tmfooter.find('td', attrs={'data-stat': "pts"}).text)
-            TmFGM = int(Tmfooter.find('td', attrs={'data-stat': "fg"}).text)
-            TmFGA = int(Tmfooter.find('td', attrs={'data-stat': "fga"}).text)
-            TmFG2M = int(Tmfooter.find('td', attrs={'data-stat': "fg2"}).text)
-            TmFG2A = int(Tmfooter.find('td', attrs={'data-stat': "fg2a"}).text)
-            TmFG3M = int(Tmfooter.find('td', attrs={'data-stat': "fg3"}).text)
-            TmFG3A = int(Tmfooter.find('td', attrs={'data-stat': "fg3a"}).text)
-            TmFTM = int(Tmfooter.find('td', attrs={'data-stat': "ft"}).text)
-            TmFTA = int(Tmfooter.find('td', attrs={'data-stat': "fta"}).text)
-            TmORB = int(Tmfooter.find('td', attrs={'data-stat': "orb"}).text)
-            TmDRB = int(Tmfooter.find('td', attrs={'data-stat': "drb"}).text)
-            TmTRB = int(Tmfooter.find('td', attrs={'data-stat': "trb"}).text)
-            TmAst = int(Tmfooter.find('td', attrs={'data-stat': "ast"}).text)
-            TmStl = int(Tmfooter.find('td', attrs={'data-stat': "stl"}).text)
-            TmBlk = int(Tmfooter.find('td', attrs={'data-stat': "blk"}).text)
-            TmTO = int(Tmfooter.find('td', attrs={'data-stat': "tov"}).text)
-            TmFoul = int(Tmfooter.find('td', attrs={'data-stat': "pf"}).text)
+                # Get Tm records into variables
+                Tmfooter = boxes[0].tfoot
+                TmName = str(boxes[0].h2.text)
+                TmPF = int(Tmfooter.find('td', attrs={'data-stat': "pts"}).text)
+                TmFGM = int(Tmfooter.find('td', attrs={'data-stat': "fg"}).text)
+                TmFGA = int(Tmfooter.find('td', attrs={'data-stat': "fga"}).text)
+                TmFG2M = int(Tmfooter.find('td', attrs={'data-stat': "fg2"}).text)
+                TmFG2A = int(Tmfooter.find('td', attrs={'data-stat': "fg2a"}).text)
+                TmFG3M = int(Tmfooter.find('td', attrs={'data-stat': "fg3"}).text)
+                TmFG3A = int(Tmfooter.find('td', attrs={'data-stat': "fg3a"}).text)
+                TmFTM = int(Tmfooter.find('td', attrs={'data-stat': "ft"}).text)
+                TmFTA = int(Tmfooter.find('td', attrs={'data-stat': "fta"}).text)
+                TmORB = int(Tmfooter.find('td', attrs={'data-stat': "orb"}).text)
+                TmDRB = int(Tmfooter.find('td', attrs={'data-stat': "drb"}).text)
+                TmTRB = int(Tmfooter.find('td', attrs={'data-stat': "trb"}).text)
+                TmAst = int(Tmfooter.find('td', attrs={'data-stat': "ast"}).text)
+                TmStl = int(Tmfooter.find('td', attrs={'data-stat': "stl"}).text)
+                TmBlk = int(Tmfooter.find('td', attrs={'data-stat': "blk"}).text)
+                TmTO = int(Tmfooter.find('td', attrs={'data-stat': "tov"}).text)
+                TmFoul = int(Tmfooter.find('td', attrs={'data-stat': "pf"}).text)
 
-            # Get Opp records into variables
-            Oppfooter = boxes[1].tfoot
-            OppName = str(boxes[1].h2.text)
-            OppPF = int(Oppfooter.find('td', attrs={'data-stat': "pts"}).text)
-            OppFGM = int(Oppfooter.find('td', attrs={'data-stat': "fg"}).text)
-            OppFGA = int(Oppfooter.find('td', attrs={'data-stat': "fga"}).text)
-            OppFG2M = int(Oppfooter.find('td', attrs={'data-stat': "fg2"}).text)
-            OppFG2A = int(Oppfooter.find('td', attrs={'data-stat': "fg2a"}).text)
-            OppFG3M = int(Oppfooter.find('td', attrs={'data-stat': "fg3"}).text)
-            OppFG3A = int(Oppfooter.find('td', attrs={'data-stat': "fg3a"}).text)
-            OppFTM = int(Oppfooter.find('td', attrs={'data-stat': "ft"}).text)
-            OppFTA = int(Oppfooter.find('td', attrs={'data-stat': "fta"}).text)
-            OppORB = int(Oppfooter.find('td', attrs={'data-stat': "orb"}).text)
-            OppDRB = int(Oppfooter.find('td', attrs={'data-stat': "drb"}).text)
-            OppTRB = int(Oppfooter.find('td', attrs={'data-stat': "trb"}).text)
-            OppAst = int(Oppfooter.find('td', attrs={'data-stat': "ast"}).text)
-            OppStl = int(Oppfooter.find('td', attrs={'data-stat': "stl"}).text)
-            OppBlk = int(Oppfooter.find('td', attrs={'data-stat': "blk"}).text)
-            OppTO = int(Oppfooter.find('td', attrs={'data-stat': "tov"}).text)
-            OppFoul = int(Oppfooter.find('td', attrs={'data-stat': "pf"}).text)
+                # Get Opp records into variables
+                Oppfooter = boxes[1].tfoot
+                OppName = str(boxes[1].h2.text)
+                OppPF = int(Oppfooter.find('td', attrs={'data-stat': "pts"}).text)
+                OppFGM = int(Oppfooter.find('td', attrs={'data-stat': "fg"}).text)
+                OppFGA = int(Oppfooter.find('td', attrs={'data-stat': "fga"}).text)
+                OppFG2M = int(Oppfooter.find('td', attrs={'data-stat': "fg2"}).text)
+                OppFG2A = int(Oppfooter.find('td', attrs={'data-stat': "fg2a"}).text)
+                OppFG3M = int(Oppfooter.find('td', attrs={'data-stat': "fg3"}).text)
+                OppFG3A = int(Oppfooter.find('td', attrs={'data-stat': "fg3a"}).text)
+                OppFTM = int(Oppfooter.find('td', attrs={'data-stat': "ft"}).text)
+                OppFTA = int(Oppfooter.find('td', attrs={'data-stat': "fta"}).text)
+                OppORB = int(Oppfooter.find('td', attrs={'data-stat': "orb"}).text)
+                OppDRB = int(Oppfooter.find('td', attrs={'data-stat': "drb"}).text)
+                OppTRB = int(Oppfooter.find('td', attrs={'data-stat': "trb"}).text)
+                OppAst = int(Oppfooter.find('td', attrs={'data-stat': "ast"}).text)
+                OppStl = int(Oppfooter.find('td', attrs={'data-stat': "stl"}).text)
+                OppBlk = int(Oppfooter.find('td', attrs={'data-stat': "blk"}).text)
+                OppTO = int(Oppfooter.find('td', attrs={'data-stat': "tov"}).text)
+                OppFoul = int(Oppfooter.find('td', attrs={'data-stat': "pf"}).text)
 
-            detailedResultsDf = detailedResultsDf.append(
-                    {'GameDate': GameDate,
-                     'TmName': TmName,
-                     'TmPF': TmPF,
-                     'TmFGM': TmFGM,
-                     'TmFGA': TmFGA,
-                     'TmFG2M': TmFG2M,
-                     'TmFG2A': TmFG2A,
-                     'TmFG3M': TmFG3M,
-                     'TmFG3A': TmFG3A,
-                     'TmFTM': TmFTM,
-                     'TmFTA': TmFTA,
-                     'TmORB': TmORB,
-                     'TmDRB': TmDRB,
-                     'TmTRB': TmTRB,
-                     'TmAst': TmAst,
-                     'TmStl': TmStl,
-                     'TmBlk': TmBlk,
-                     'TmTO': TmTO,
-                     'TmFoul': TmFoul,
-                     'OppName': OppName,
-                     'OppPF': OppPF,
-                     'OppFGM': OppFGM,
-                     'OppFGA': OppFGA,
-                     'OppFG2M': OppFG2M,
-                     'OppFG2A': OppFG2A,
-                     'OppFG3M': OppFG3M,
-                     'OppFG3A': OppFG3A,
-                     'OppFTM': OppFTM,
-                     'OppFTA': OppFTA,
-                     'OppORB': OppORB,
-                     'OppDRB': OppDRB,
-                     'OppTRB': OppTRB,
-                     'OppAst': OppAst,
-                     'OppStl': OppStl,
-                     'OppBlk': OppBlk,
-                     'OppTO': OppTO,
-                     'OppFoul': OppFoul
-                     }, ignore_index=True)
+                detailedResultsDf = detailedResultsDf.append(
+                        {'GameDate': GameDate,
+                        'TmName': TmName,
+                        'TmPF': TmPF,
+                        'TmFGM': TmFGM,
+                        'TmFGA': TmFGA,
+                        'TmFG2M': TmFG2M,
+                        'TmFG2A': TmFG2A,
+                        'TmFG3M': TmFG3M,
+                        'TmFG3A': TmFG3A,
+                        'TmFTM': TmFTM,
+                        'TmFTA': TmFTA,
+                        'TmORB': TmORB,
+                        'TmDRB': TmDRB,
+                        'TmTRB': TmTRB,
+                        'TmAst': TmAst,
+                        'TmStl': TmStl,
+                        'TmBlk': TmBlk,
+                        'TmTO': TmTO,
+                        'TmFoul': TmFoul,
+                        'OppName': OppName,
+                        'OppPF': OppPF,
+                        'OppFGM': OppFGM,
+                        'OppFGA': OppFGA,
+                        'OppFG2M': OppFG2M,
+                        'OppFG2A': OppFG2A,
+                        'OppFG3M': OppFG3M,
+                        'OppFG3A': OppFG3A,
+                        'OppFTM': OppFTM,
+                        'OppFTA': OppFTA,
+                        'OppORB': OppORB,
+                        'OppDRB': OppDRB,
+                        'OppTRB': OppTRB,
+                        'OppAst': OppAst,
+                        'OppStl': OppStl,
+                        'OppBlk': OppBlk,
+                        'OppTO': OppTO,
+                        'OppFoul': OppFoul
+                        }, ignore_index=True)
 
-            detailedResultsDf = detailedResultsDf.append(
-                    {'GameDate': GameDate,
-                     'TmName': OppName,
-                     'TmPF': OppPF,
-                     'TmFGM': OppFGM,
-                     'TmFGA': OppFGA,
-                     'TmFG2M': OppFG2M,
-                     'TmFG2A': OppFG2A,
-                     'TmFG3M': OppFG3M,
-                     'TmFG3A': OppFG3A,
-                     'TmFTM': OppFTM,
-                     'TmFTA': OppFTA,
-                     'TmORB': OppORB,
-                     'TmDRB': OppDRB,
-                     'TmTRB': OppTRB,
-                     'TmAst': OppAst,
-                     'TmStl': OppStl,
-                     'TmBlk': OppBlk,
-                     'TmTO': OppTO,
-                     'TmFoul': OppFoul,
-                     'OppName': TmName,
-                     'OppPF': TmPF,
-                     'OppFGM': TmFGM,
-                     'OppFGA': TmFGA,
-                     'OppFG2M': TmFG2M,
-                     'OppFG2A': TmFG2A,
-                     'OppFG3M': TmFG3M,
-                     'OppFG3A': TmFG3A,
-                     'OppFTM': TmFTM,
-                     'OppFTA': TmFTA,
-                     'OppORB': TmORB,
-                     'OppDRB': TmDRB,
-                     'OppTRB': TmTRB,
-                     'OppAst': TmAst,
-                     'OppStl': TmStl,
-                     'OppBlk': TmBlk,
-                     'OppTO': TmTO,
-                     'OppFoul': TmFoul
-                     }, ignore_index=True)
-        except TypeError:
-            print('Skipping number ' + str(n))
+                detailedResultsDf = detailedResultsDf.append(
+                        {'GameDate': GameDate,
+                        'TmName': OppName,
+                        'TmPF': OppPF,
+                        'TmFGM': OppFGM,
+                        'TmFGA': OppFGA,
+                        'TmFG2M': OppFG2M,
+                        'TmFG2A': OppFG2A,
+                        'TmFG3M': OppFG3M,
+                        'TmFG3A': OppFG3A,
+                        'TmFTM': OppFTM,
+                        'TmFTA': OppFTA,
+                        'TmORB': OppORB,
+                        'TmDRB': OppDRB,
+                        'TmTRB': OppTRB,
+                        'TmAst': OppAst,
+                        'TmStl': OppStl,
+                        'TmBlk': OppBlk,
+                        'TmTO': OppTO,
+                        'TmFoul': OppFoul,
+                        'OppName': TmName,
+                        'OppPF': TmPF,
+                        'OppFGM': TmFGM,
+                        'OppFGA': TmFGA,
+                        'OppFG2M': TmFG2M,
+                        'OppFG2A': TmFG2A,
+                        'OppFG3M': TmFG3M,
+                        'OppFG3A': TmFG3A,
+                        'OppFTM': TmFTM,
+                        'OppFTA': TmFTA,
+                        'OppORB': TmORB,
+                        'OppDRB': TmDRB,
+                        'OppTRB': TmTRB,
+                        'OppAst': TmAst,
+                        'OppStl': TmStl,
+                        'OppBlk': TmBlk,
+                        'OppTO': TmTO,
+                        'OppFoul': TmFoul
+                        }, ignore_index=True)
+            except TypeError:
+                print('Skipping number ' + str(n))
         n = n + 1
 
     del TmName, TmPF, TmFGM, TmFGA, TmFG2M, TmFG2A, TmFG3M, TmFG3A, TmFTM
@@ -466,6 +470,19 @@ def dataQualityAdjustments(compactData, detailedData):
         (detailedData['OppID'] == 1450) &
         (detailedData['GameDate'] == '2019-12-04'), 'GameDate'] = '2019-12-05'
 
+    # Adjust UTEP - Ball St. from 12/23/19 to 12/24/19
+    # UTEP = 1431, Ball St. = 1123
+    # NOTE - since switching to indersting games by day, we always have to \
+    # adjust the compact date to the detailed date or else the scrape will miss it
+    compactData.loc[
+        (compactData['TmID'] == 1431) &
+        (compactData['OppID'] == 1123) &
+        (compactData['GameDate'] == '2019-12-23'), 'GameDate'] = '2019-12-24'
+    compactData.loc[
+        (compactData['TmID'] == 1123) &
+        (compactData['OppID'] == 1431) &
+        (compactData['GameDate'] == '2019-12-23'), 'GameDate'] = '2019-12-24'
+
     return compactData, detailedData
 
 
@@ -492,51 +509,53 @@ if __name__ == '__main__':
         for idx, row in compactResultsUniqueDates.iterrows():
             print(f"Working on Day: {row['Date']}")
 
-        # Scrape ALL the games for the dates where games are missing details
-        df2 = scrapeCurrSeasonDetailedResults(SPORTSREFURL,
+            # Scrape ALL the games for the dates where games are missing details
+            df2 = scrapeCurrSeasonDetailedResults(SPORTSREFURL,
                                                 row)
 
-        columnsToMergeOn = ['TmID', 'OppID', 'GameDate']
+            columnsToMergeOn = ['TmID', 'OppID', 'GameDate']
 
-        # Handle data quality mismatches
-        df, df2 = dataQualityAdjustments(df, df2)
+            # Handle data quality mismatches
+            df, df2 = dataQualityAdjustments(df, df2)
 
-        # Merge left to use Massey as the ultimate source for data, with
-        # SportsRef to augment with details.
-        # Note that df only contains the games missing details
-        # This limits the records to insert down to ONLY the new ones on
-        # the dates given.
-        regSeasonGamesDetailed = pd.merge(df, df2,
-                                          on=columnsToMergeOn,
-                                          how='left')
+            # Merge left to use Massey as the ultimate source for data, with
+            # SportsRef to augment with details.
+            # Note that df only contains the games missing details
+            # This limits the records to insert down to ONLY the new ones on
+            # the dates given.
+            regSeasonGamesDetailed = pd.merge(
+                df.loc[df['GameDate'] == row['Date']], 
+                df2,
+                on=columnsToMergeOn,
+                how='left')
 
-        # Format gamedate as datetime
-        regSeasonGamesDetailed['GameDate'] = pd.to_datetime(
-            regSeasonGamesDetailed['GameDate'], format='%Y/%m/%d')
+            # Format gamedate as datetime
+            regSeasonGamesDetailed['GameDate'] = pd.to_datetime(
+                regSeasonGamesDetailed['GameDate'], format='%Y/%m/%d')
 
-        # Note there are some discrepancies between Massey & SR
-        # We will use Massey as the source or record but track diffs
-        diffPointsAcrossSources = regSeasonGamesDetailed.loc[
-            (regSeasonGamesDetailed['TmPF_x'] != regSeasonGamesDetailed[
-                'TmPF_y']) |
-            (regSeasonGamesDetailed['OppPF_x'] != regSeasonGamesDetailed[
-                'OppPF_y'])]
-        del regSeasonGamesDetailed['TmPF_y'], regSeasonGamesDetailed['OppPF_y']
-        regSeasonGamesDetailed = regSeasonGamesDetailed.rename(columns={
-            'TmPF_x': 'TmPF',
-            'OppPF_x': 'OppPF'})
+            # Note there are some discrepancies between Massey & SR
+            # We will use Massey as the source or record but track diffs
+            diffPointsAcrossSources = regSeasonGamesDetailed.loc[
+                (regSeasonGamesDetailed['TmPF_x'] != regSeasonGamesDetailed[
+                    'TmPF_y']) |
+                (regSeasonGamesDetailed['OppPF_x'] != regSeasonGamesDetailed[
+                    'OppPF_y'])]
+            del regSeasonGamesDetailed['TmPF_y'], regSeasonGamesDetailed['OppPF_y']
+            regSeasonGamesDetailed = regSeasonGamesDetailed.rename(columns={
+                'TmPF_x': 'TmPF',
+                'OppPF_x': 'OppPF'})
 
-        regSeasonGamesDetailed = addAdditionalGameColumns(
-            regSeasonGamesDetailed)
-        teams = pd.read_csv('data/Stage2DataFiles/Teams.csv')
-        regSeasonGamesDetailed = addTeamNames(regSeasonGamesDetailed, teams)
+            regSeasonGamesDetailed = addAdditionalGameColumns(
+                regSeasonGamesDetailed)
+            teams = pd.read_csv('data/Stage2DataFiles/Teams.csv')
+            regSeasonGamesDetailed = addTeamNames(regSeasonGamesDetailed, teams)
 
-        gamesMissingDetails = regSeasonGamesDetailed.loc[
-            regSeasonGamesDetailed['TmAst'].isnull()]
-        countMissingDetails = len(gamesMissingDetails)
-        assert countMissingDetails == 0, 'Some new games missing details'
-        db = get_db()
-        insertNewGameRecords(regSeasonGamesDetailed, _db=db)
+            gamesMissingDetails = regSeasonGamesDetailed.loc[
+                regSeasonGamesDetailed['TmAst'].isnull()]
+            countMissingDetails = len(gamesMissingDetails)
+            assert countMissingDetails == 0, 'Some new games missing details'
+            db = get_db()
+            insertNewGameRecords(regSeasonGamesDetailed, _db=db)
 
         # Drop current season's pre-aggregated records
         results = db.seasonteams.find({"Season": CURRENTSEASON}, {'_id': 1})
