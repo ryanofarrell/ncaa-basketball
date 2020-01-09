@@ -1,5 +1,6 @@
 
 import pandas as pd
+from itertools import product
 
 
 # TODO switch back the allow_output_mutation=True once bug 
@@ -215,6 +216,76 @@ def opponentAdjustMetricAllSeasons(_db, prefix='Tm', metric='Margin', suffix='pe
     seasonAggMetric['OA_'+prefix+metric+suffix] = seasonAggMetric[prefix+metric+suffix] - seasonAggMetric['Opp_'+otherPrefix+metric+suffix]
     #st.write(seasonAggMetric)
     return seasonAggMetric
+def opponentAdjust(
+        data,
+        PREFIXES=['Tm'],
+        METRICS=['Margin', 'PF'],
+        DENOMS=['per40'],
+        includeOARankFields=False,
+        includeNormFields=False,
+        includeNormRankFields=False
+    ):
+    """Opponent-adjusts the given prefixes, metrics, and denominators in the provided dataframe
+
+    Arguments:
+        data {DataFrame} -- dataframe of pre-aggregated results - may span multiple seasons
+
+    Keyword Arguments:
+        PREFIXES {list} -- prefixes to opponent-adjust (default: {['Tm']})
+        METRICS {list} -- metrics to opponent-adjust (default: {['Margin', 'PF']})
+        DENOMS {list} -- denominators to opponent-adjust (default: {['per40']})
+        includeOARankFields {bool} -- if the returned dataframe should also include the rank of the OA metric (default: {False})
+        includeNormFields {bool} -- if the returned dataframe should also include the normalized fields (default: {False})
+        includeNormRankFields {bool} -- if the returned dataframe should also include the rank of the normalized metric (default: {False})
+
+
+    Returns:
+        [DataFrame] -- The provided dataframe + all opponent-adjusted columns (prefixed with 'OA_')
+    """
+
+    for PREFIX, METRIC, DENOM in product(PREFIXES, METRICS, DENOMS):
+        assert PREFIX in ['Opp', 'Tm'], 'Invalid prefix'
+        assert DENOM in ['per40', 'perPoss', 'perGame'], 'Invalid denom'
+        # TODO insert assert that all columns needed exist in data
+
+        OTHER_PREFIX = 'Opp' if PREFIX == 'Tm' else 'Tm'
+        DENOM_FIELD = 'Mins' if DENOM == 'per40' else DENOM[-4:]
+        NORMALIZE_CONST = 40 if DENOM == 'per40' else 1
+
+        # Perform the actual opponent-adjusting
+        data[PREFIX+METRIC+DENOM] = data[PREFIX+METRIC] / data[PREFIX+DENOM_FIELD] * NORMALIZE_CONST
+        data['OA_'+PREFIX+METRIC+DENOM] = \
+            (data[PREFIX+METRIC+DENOM]) - \
+            (
+                (data['OppSum_'+OTHER_PREFIX+METRIC] - data[PREFIX+METRIC]) /
+                (data['OppSum_'+OTHER_PREFIX+DENOM_FIELD] - data[PREFIX+DENOM_FIELD])
+            ) * NORMALIZE_CONST
+
+        # Rank normalized fields if desired
+        if includeNormRankFields:
+            data['Rnk_'+PREFIX+METRIC+DENOM] = data.groupby(
+                'Season'
+            )[PREFIX+METRIC+DENOM].rank(
+                'min', ascending=is_ascending_rank(PREFIX, METRIC)
+            )
+
+        # Delete normalized fields if desired
+        if not includeNormFields:
+            del data[PREFIX+METRIC+DENOM]
+
+        # Rank OA fields if desired
+        if includeOARankFields:
+            data['Rnk_OA_'+PREFIX+METRIC+DENOM] = data.groupby(
+                'Season'
+            )['OA_'+PREFIX+METRIC+DENOM].rank(
+                'min', ascending=is_ascending_rank(PREFIX, METRIC)
+            )
+
+
+    return data
+
+
+
 
 if __name__ == "__main__":
     pass
