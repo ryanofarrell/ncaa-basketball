@@ -440,11 +440,14 @@ def insertNewGameRecords(df, _db):
     # TODO either genericise this to insert into different collections
     # or remove it
     # Main benefit is the printing of results - we can do better
-    print(f"Converting {len(df)} new records to dict")
-    data_dict = df.to_dict('records')
-    print(f"Inserting {len(data_dict)} records to database")
-    _db.games.insert_many(data_dict, ordered=False)
-    print(f"Inserted {len(data_dict)} records.")
+    if len(df) == 0:
+        print(f"Skipped inserting 0 records")
+    else:
+        print(f"Converting {len(df)} new records to dict")
+        data_dict = df.to_dict('records')
+        print(f"Inserting {len(data_dict)} records to database")
+        _db.games.insert_many(data_dict, ordered=False)
+        print(f"Inserted {len(data_dict)} records.")
 
 
 def dataQualityAdjustments(compactData, detailedData):
@@ -555,6 +558,9 @@ if __name__ == '__main__':
             countMissingDetails = len(gamesMissingDetails)
             assert countMissingDetails == 0, 'Some new games missing details'
             db = get_db()
+
+            # TODO some way to modify the game date back to massey
+            # currently, going to scrape 12/23 forever since it was modified to SR
             insertNewGameRecords(regSeasonGamesDetailed, _db=db)
 
         # Drop current season's pre-aggregated records
