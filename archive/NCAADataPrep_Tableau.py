@@ -193,6 +193,7 @@ for oa in {'', 'OA_'}:
                     ascendingrankmetrics.append(oa + prefix + coremetric + suffix)
 del oa, prefix, coremetric, suffix, negativecoremetrics, x, y, z
 
+"""Removing on 3/18/20
 ###############################################################################
 ###############################################################################
 ###############################################################################
@@ -200,11 +201,12 @@ del oa, prefix, coremetric, suffix, negativecoremetrics, x, y, z
 
 # Current season prep
 
+
 # bring in current season results
 rsg_curr = pd.read_csv(
         filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/rsg_curr.csv')
 seasons = pd.read_csv(
-    filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle/Seasons.csv')
+    filepath_or_buffer='../data/Stage2DataFiles/Seasons.csv')
 
 
 # Create list of rows with null values anywhere
@@ -259,6 +261,7 @@ timer.split('Completed current season: ')
 ###############################################################################
 ###############################################################################
 ###############################################################################
+"""
 
 # Handling of different config options (run all seasons, run just current season)
 
@@ -296,10 +299,10 @@ elif runall == True:
     seasonteams_out = pd.DataFrame()
 
     rsgd_prev = pd.read_csv(
-        '/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle-update/RegularSeasonDetailedResults.csv'
+        '../data/Stage2DataFiles/RegularSeasonDetailedResults.csv'
     )
     rsgc_prev = pd.read_csv(
-            '/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle-update/RegularSeasonCompactResults.csv'
+            '../data/Stage2DataFiles/RegularSeasonCompactResults.csv'
     )
 
     # Merge in day 0 to rsgd, add days to day 0 to get date of game, delete extra columns
@@ -390,6 +393,7 @@ elif runall == True:
     rsg_prev['TmTRB'] = rsg_prev['TmORB'] + rsg_prev['TmDRB']
     rsg_prev['OppTRB'] = rsg_prev['OppORB'] + rsg_prev['OppDRB']
 
+    """Removing on 3/18/20
     assert dfcoldiffs(rsg_prev,rsg_curr,'count') == 0,'Columns different between rsg_out and rsg_tocalc'
 
     # Append current-year data to rsgd
@@ -397,6 +401,8 @@ elif runall == True:
     rsg_tocalc = rsg_prev.append(rsg_curr)
 
     del rsg_prev, rsg_curr
+    """
+    rsg_tocalc = rsg_prev.copy()
 
 timer.split('Read everything in: ')
 ###############################################################################
@@ -436,7 +442,7 @@ del missinggamesseasons
 
 # Bring in team names for both Tm and Opp
 teams = pd.read_csv(
-    filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle/Teams.csv')
+    filepath_or_buffer='../data/Stage2DataFiles/Teams.csv')
 
 rsg_tocalc = pd.merge(
     rsg_tocalc, teams[['TeamID', 'TeamName']], left_on='TmID', right_on='TeamID')
@@ -664,11 +670,11 @@ timer.split('Looping time: ')
 # Do tournament information
 if runall == True:
     trd = pd.read_csv(
-        filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle/NCAATourneyDetailedResults.csv')
+        filepath_or_buffer='../data/Stage2DataFiles/NCAATourneyDetailedResults.csv')
     trc = pd.read_csv(
-        filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle/NCAATourneyCompactResults.csv')
-    trd18 = pd.read_csv(
-        filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/2018TourneyResults.csv')
+        filepath_or_buffer='../data/Stage2DataFiles/NCAATourneyCompactResults.csv')
+    # trd18 = pd.read_csv( # Removing 3/18/20
+    #     filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/2018TourneyResults.csv')
 
     # Merge in day 0 to rsgd, add days to day 0 to get date of game, delete extra columns
     trd = pd.merge(trd, seasons[['Season', 'DayZero']], on='Season')
@@ -685,7 +691,7 @@ if runall == True:
     trc['GameDate'] = pd.to_datetime(trc['GameDate']).dt.strftime('%Y-%m-%d')
     del trc['DayNum'], trc['DayZero']
 
-    trd = trd.append(trd18)
+    # trd = trd.append(trd18) # removing 3/18/20
 
     tr = pd.merge(
             left = trc,
@@ -693,7 +699,7 @@ if runall == True:
             on = list(trc),
             how = 'outer')
 
-    del trc, trd, trd18
+    del trc, trd#, trd18
 
     # Rename all the columns...
     tr = tr.rename(columns={'GameDate': 'GameDate',
@@ -818,7 +824,7 @@ if runall == True:
 
     # Get seeds into tr dataframe
     tourneyseeds = pd.read_csv(
-        filepath_or_buffer='/Users/Ryan/Google Drive/ncaa-basketball-data/2018-kaggle-update/NCAATourneySeeds.csv'
+        filepath_or_buffer='../data/Stage2DataFiles/NCAATourneySeeds.csv'
     )
     tourneyseeds['TmPlayInTeam'] = 0
     tourneyseeds.loc[tourneyseeds['Seed'].str.len() == 4,'TmPlayInTeam'] = 1
