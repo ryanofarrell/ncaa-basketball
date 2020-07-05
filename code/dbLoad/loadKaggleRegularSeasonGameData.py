@@ -1,8 +1,20 @@
+
+#%%
 import pandas as pd
+import numpy as np
 from math import isnan
 
+# Import to add project folder to sys path
+import sys
+utils_path = '/Users/Ryan/Documents/projects/ncaa-basketball/code/utils'
+if utils_path not in sys.path:
+    sys.path.append(utils_path)
 
-def calculate_possessions(reg_season_games):
+from db import get_db
+from api import getSeasonsList, preAggSeasonGames
+
+
+def calculatePossessions(reg_season_games):
     """Adds a column for Tm and Opp number of possessions to provided dataframe
     Uses Basketball Reference method:
     https://www.basketball-reference.com/about/glossary.html
@@ -36,7 +48,7 @@ def calculate_possessions(reg_season_games):
     return reg_season_games
 
 
-def calculate_game_dates(reg_season_games, seasons):
+def calculateGameDates(reg_season_games, seasons):
     """Adds GameDate column to provided DataFrame by adding DayNum to the
     season's DayZero
 
@@ -176,7 +188,7 @@ def addAdditionalGameColumns(rsg):
     # Indicate regular season game
     rsg['isRegularSeason'] = True
 
-    rsg = calculate_possessions(rsg)
+    rsg = calculatePossessions(rsg)
 
     return rsg
 
@@ -205,29 +217,97 @@ def addTeamNames(rsg, teams):
 
 
 def addVegasLineToKaggleData(rsg):
-    """Loads the vegas data from locally-sourced CSV
-    and cleans up column names/types, merges into provided dataframe
+    # Read in data
+    firstRun = True
+    for suffix in range(3,20):
+        suffStr = str(suffix)
+        suffStr = '0'*(2-len(suffStr)) + suffStr
+        print(f"Working on {suffStr}")
+        csvPath = f'/Users/Ryan/Documents/projects/ncaa-basketball/data/vegasLines/ncaabb{suffStr}.csv'
+        
+        if firstRun:
+            df = pd.read_csv(csvPath)
+            firstRun = False
+        else:
+            df = df.append(pd.read_csv(csvPath))
 
-    Arguments:
-        rsg {DataFrame} -- To add vegas lines
+    df = df[[
+        'date',
+        'home',
+        'road',
+        'neutral',
+        'line'
+    ]]
+    df['line'] = pd.to_numeric(df['line'], errors='coerce')
+    
+    # Check for matching team names, drop those without
+    df['home'] = df['home'].str.lower()
+    df['home'] = df['home'].str.strip()
+    df['road'] = df['road'].str.lower()
+    df['road'] = df['road'].str.strip()
+    teamSpellings = pd.read_csv(f'/Users/Ryan/Documents/projects/ncaa-basketball/data/TeamSpellings.csv', encoding="ISO-8859-1")
+    df = pd.merge(
+        left=df,
+        right=teamSpellings.rename(columns={'TeamNameSpelling': 'home', 'TeamID': 'homeID'}),
+        on=['home'],
+        how='left'
+    )
+    df = pd.merge(
+        left=df,
+        right=teamSpellings.rename(columns={'TeamNameSpelling': 'road', 'TeamID': 'roadID'}),
+        on=['road'],
+        how='left'
+    )
+    dfMissingHome = df.loc[pd.isnull(df['homeID'])]
+    dfMissingRoad = df.loc[pd.isnull(df['roadID'])]
 
-    Returns:
-        DataFrame -- Input data + the vegas data
-    """
-    df = pd.read_csv(
-        '/Users/Ryan/Google Drive/HistoricalNCAAData/VegasAnalysisFull.csv')
-    df = df[['Date', 'Team', 'Opponent', 'TeamLineVegas']]
-    df = df.rename(columns={'Team': 'TmName',
-                            'Opponent': 'OppName',
-                            'Date': 'GameDate',
-                            'TeamLineVegas': 'GameVegasLine'})
+    print(f"Dropping {len(df.loc[pd.isnull(df['homeID']) | pd.isnull(df['roadID'])])} records due to no matching team name")
+
+    df = df.loc[~pd.isnull(df['homeID']) & ~pd.isnull(df['roadID'])]
+
+    print(f"Dropping {len(df.loc[pd.isnull(df['line'])])} records due to no line provided")
+    df = df.loc[~pd.isnull(df['line'])]
+
+    # Clean up data to only leave fields needed to merge
+    for col in ['home', 'road', 'neutral']:
+        del df[col]
+
+    df = df.rename(columns={
+        'date': 'GameDate',
+        'line': 'GameVegasLine',
+        'homeID': 'TmID',
+        'roadID': 'OppID'
+    })
+
     df['GameDate'] = pd.to_datetime(df['GameDate'])
-    rsg = pd.merge(rsg, df, how='left', on=['TmName', 'OppName', 'GameDate'])
+
+    # Duplicate records for each team
+    df1 = df.copy()
+    df1 = df1.rename(columns={
+        'TmID': 'OppID',
+        'OppID': 'TmID'
+    })
+    df1['GameVegasLine'] *= -1
+    df = df.append(df1)
+
+    df = df.drop_duplicates(subset=['TmID', 'OppID', 'GameDate'])
+
+    # Merge in lines 
+    rsg = pd.merge(
+        rsg,
+        df,
+        on=['TmID', 'OppID', 'GameDate'],
+        how='left'
+    )
+    print(f"Added {len(rsg.loc[~pd.isnull(rsg['GameVegasLine'])])} vegas lines")
+
+    # TODO adjust game dates by 1 to add additional ~500 game lines
+
     return rsg
 
 
-def read_and_clean_source_data():
-    """Master handlet of other functions. Reads in Kaggle data,
+def readCleanSourceData():
+    """Master handler of other functions. Reads in Kaggle data,
     gets game dates, renames columns, adds team names, and  duplicates records.
 
     Returns:
@@ -249,7 +329,7 @@ def read_and_clean_source_data():
         how='outer')
 
     # Get game dates
-    reg_season_games_combined = calculate_game_dates(
+    reg_season_games_combined = calculateGameDates(
         reg_season_games_combined, 
         seasons
     )
@@ -269,9 +349,10 @@ def read_and_clean_source_data():
     return reg_season_games_combined
 
 
+#%% Main
 if __name__ == '__main__':
     # Get all Kaggle data
-    reg_season_games_combined = read_and_clean_source_data()
+    reg_season_games_combined = readCleanSourceData()
 
     # Add some details
     reg_season_games_combined = addAdditionalGameColumns(
@@ -291,7 +372,6 @@ if __name__ == '__main__':
         len(reg_season_games_combined)
 
     # Read in data, convert to dict, insert records into collection
-    from db import get_db
     db = get_db()
     # TODO look in to batch delete previous seasons vs entire drop
     print(f"Dropping games from MongoDB")
@@ -309,3 +389,18 @@ if __name__ == '__main__':
     print(f"Inserting {len(detailed_data_dict)} records to database")
     db.games.insert_many(detailed_data_dict, ordered=False)
     print(f"Inserted {len(detailed_data_dict)} records.")
+
+
+    # Pre-aggregate all season data 
+    db.seasonteams.drop()
+    SEASONS = getSeasonsList(_db=db)
+    for season in SEASONS:
+        print(f"Working on the {season} season.")
+        data = preAggSeasonGames(
+            pd.DataFrame(list(db.games.find({'Season': season})))
+        )
+        print(f"Converting {len(data)} new season-team records to dict")
+        data_dict = data.to_dict('records')
+        print(f"Inserting {len(data_dict)} records to database")
+        db.seasonteams.insert_many(data_dict, ordered=False)
+        print(f"Inserted {len(data_dict)} records.")
