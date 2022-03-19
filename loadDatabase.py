@@ -82,7 +82,7 @@ if __name__ == "__main__":
         games[f"{prefix}_win"] = 1 * (
             games[f"{prefix}_pts"] > games[f"{OTHERPREFIXMAP[prefix]}_pts"]
         )
-        games[f"{prefix}_rs_game"] = 1
+        games[f"{prefix}_rsgame"] = 1
         games[f"{prefix}_poss"] = (
             (
                 games["tm_fga"]
@@ -101,6 +101,7 @@ if __name__ == "__main__":
                 + games["opp_to"]
             )
         ) * 0.5
+        games[f"{prefix}_margin"] = games[f"{prefix}_pts"] - games[f"{OTHERPREFIXMAP[prefix]}_pts"]
     del games["num_ot"]
 
     # Duplicate and rename
@@ -127,7 +128,9 @@ if __name__ == "__main__":
         "tm_pts",
         "opp_pts",
     ]
-    games = games[first_cols + [x for x in games.columns if x not in first_cols]]
+    games = games[
+        first_cols + sorted([x for x in games.columns if x not in first_cols])
+    ]
 
     # TODO add postseason
 
@@ -140,21 +143,4 @@ if __name__ == "__main__":
         indexCols=["season", "date", "game_key", "tm_teamid"],
     )
 
-# %%
-q = """
-select
-    season
-    ,t.teamname
-    ,sum(g.tm_game) as games
-    ,sum(g.tm_win) as wins
-    ,sum(g.tm_game) - sum(g.tm_win) as losses
-    ,sum(cast(g.tm_win as real)) / sum(g.tm_game) as win_pct
-from games g
-left join teams t
-on g.tm_teamid = t.teamid
-where t.teamname = 'Duke'
-group by season, teamname
-order by season
-"""
-readSql(q, db="ncaa.db")
 # %%
