@@ -1,5 +1,0 @@
-1) Nav to ncaa-basketball folder
-
-2) gcloud app deploy --verbosity=debug
-
-This uses app.yaml and Dockerfile to deploy to https://ncaa-basketball-261601.appspot.com/
