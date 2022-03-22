@@ -1,211 +1,264 @@
 # %% Imports
 from typing import Counter
-from helpers import readSql
+
+import numpy as np
+from helpers import dfToTable, executeSql, getRelativeFp, readSql, logger
 import pandas as pd
-from fnmatch import fnmatch
 
 
+# %% Logging
+log = logger(
+    fp=getRelativeFp(__file__, f"logs/teamdates.log"),
+    fileLevel=10,
+    consoleLevel=20,
+)
 # %% constants
-SEASON = 2022
 OTHERPREFIXMAP = {"tm": "opp", "opp": "tm"}
 
-# %%
-q = """
-select
-    t.teamname
-    ,g.*
-from games g
-left join teams t
-on g.tm_teamid = t.teamid
-where t.teamname = 'Florida'
-order by date
-"""
-t = readSql(q, db="ncaa.db")
+SUMMABLE_LIST = [
+    "game",
+    "poss",
+    "mins",
+    "win",
+    "loss",
+    "pts",
+    "ast",
+    "availor",
+    "blk",
+    "dr",
+    "fga",
+    "fga2",
+    "fga3",
+    "fgm",
+    "fgm2",
+    "fgm3",
+    "fta",
+    "ftm",
+    "margin",
+    "or",
+    "pf",
+    "stl",
+    "to",
+    "tr",
+]
+OUTPUT_METRIC_DICT = {
+    "win_pct": {"ascending": False, "num_col": "win", "den_col": "game"},
+    "pts_pposs": {"ascending": False, "num_col": "pts", "den_col": "poss"},
+    "ast_pposs": {"ascending": False, "num_col": "ast", "den_col": "poss"},
+    "blk_pposs": {"ascending": False, "num_col": "blk", "den_col": "poss"},
+    "dr_pposs": {"ascending": False, "num_col": "dr", "den_col": "poss"},
+    # "fga_pposs": {"ascending": False, "num_col": "fga", "den_col": "poss"},
+    # "fga2_pposs": {"ascending": False, "num_col": "fga2", "den_col": "poss"},
+    # "fga3_pposs": {"ascending": False, "num_col": "fga3", "den_col": "poss"},
+    # "fgm_pposs": {"ascending": False, "num_col": "fgm", "den_col": "poss"},
+    # "fgm2_pposs": {"ascending": False, "num_col": "fgm2", "den_col": "poss"},
+    # "fgm3_pposs": {"ascending": False, "num_col": "fgm3", "den_col": "poss"},
+    # "fta_pposs": {"ascending": False, "num_col": "fta", "den_col": "poss"},
+    # "ftm_pposs": {"ascending": False, "num_col": "ftm", "den_col": "poss"},
+    "margin_pposs": {"ascending": False, "num_col": "margin", "den_col": "poss"},
+    "or_pposs": {"ascending": False, "num_col": "or", "den_col": "poss"},
+    "pf_pposs": {"ascending": True, "num_col": "pf", "den_col": "poss"},
+    "stl_pposs": {"ascending": False, "num_col": "stl", "den_col": "poss"},
+    "to_pposs": {"ascending": True, "num_col": "to", "den_col": "poss"},
+    "tr_pposs": {"ascending": False, "num_col": "tr", "den_col": "poss"},
+    "ft_pct": {"ascending": False, "num_col": "ftm", "den_col": "fta"},
+    "fg_pct": {"ascending": False, "num_col": "fgm", "den_col": "fga"},
+    "fg2_pct": {"ascending": False, "num_col": "fgm2", "den_col": "fga2"},
+    "fg3_pct": {"ascending": False, "num_col": "fgm3", "den_col": "fga3"},
+    "astto_ratio": {"ascending": False, "num_col": "ast", "den_col": "to"},
+    "or_pct": {"ascending": False, "num_col": "or", "den_col": "availor"},
+}
 
 # %% Create sql for injection
-nonmetric_list = ["game", "poss", "mins", "rsgame", "win"]
-metrics_dict = {
-    "pts": True,
-    "ast": True,
-    "blk": True,
-    "dr": True,
-    "fga": True,
-    "fga2": True,
-    "fga3": True,
-    "fgm": True,
-    "fgm2": True,
-    "fgm3": True,
-    "fta": True,
-    "ftm": True,
-    "margin": True,
-    "or": True,
-    "pf": False,
-    "stl": True,
-    "to": False,
-    "tr": True,
-}
-metric_list = list(metrics_dict.keys())
-
 metric_cols = [
-    f"{prefix}_{metric}" for prefix in ["tm", "opp"] for metric in metric_list
-]
-nonmetric_cols = [
-    f"{prefix}_{nonmetric}" for prefix in ["tm", "opp"] for nonmetric in nonmetric_list
+    f"{prefix}_{metric}" for prefix in ["tm", "opp"] for metric in SUMMABLE_LIST
 ]
 gb_sql = ""
-for m in metric_cols + nonmetric_cols:
+for m in metric_cols:
     gb_sql += f"sum({m}) as {m}, "
 gb_sql = gb_sql[:-2]
-# %%
-q = f"""
-with dates as (
-    select distinct season, date
-    from games
-    where season = {SEASON}
-)
-,teamList as (
-    select distinct season, tm_teamid
-    from games
-    where season = {SEASON}
-)
-,allDatesAllTeams as (
-    select
-        dates.season
-        ,dates.date
-        ,teamList.tm_teamid
-    from dates
-    cross join teamList
-    on teamList.season = dates.season
-)
-select 
-    adat.*
-    ,t.teamname
-    ,{gb_sql}
-from allDatesAllTeams adat
-left join games g
-    on adat.season = g.season
-    and adat.tm_teamid = g.tm_teamid
-    and adat.date > g.date
-left join teams t
-    on adat.tm_teamid = t.teamid
-group by adat.season, adat.date, adat.tm_teamid
-order by adat.season, adat.tm_teamid, adat.date
-"""
-df = readSql(q, db="ncaa.db")
 
-# Get all games for filtering
-q = f"""
-select 
-    t.teamname
-    ,g.*
-from games g
-left join teams t
-on g.tm_teamid = t.teamid
-where season = {SEASON}
-"""
-games = readSql(q)
+# %% Function to loop through seasons
+@log.timeFuncInfo
+def get_teamdates(season: int):
+    # Get games for given season, cross join games to all dates to
+    q = f"""
+    with seasonDates as (
+        select
+            season
+            ,min(date) as minDate
+            ,max(date) as maxDate
+            from games
+            where season = {season}
+    )
+    ,dates as (
+        select distinct 
+            s.season
+            ,c.date
+        from calendar c
+        left join seasonDates s
+        where c.date between minDate and maxDate
+    )
+    ,teamList as (
+        select distinct season, tm_teamid
+        from games
+        where season = {season}
+    )
+    ,allDatesAllTeams as (
+        select
+            dates.season
+            ,dates.date
+            ,teamList.tm_teamid
+        from dates
+        cross join teamList
+        on teamList.season = dates.season
+    )
+    select 
+        adat.*
+        ,t.teamname
+        ,{gb_sql}
+    from allDatesAllTeams adat
+    left join games g
+        on adat.season = g.season
+        and adat.tm_teamid = g.tm_teamid
+        and adat.date > g.date
+    left join teams t
+        on adat.tm_teamid = t.teamid
+    group by adat.season, adat.date, adat.tm_teamid
+    order by adat.season, adat.tm_teamid, adat.date
+    """
+    df = readSql(q, db="ncaa.db")
 
+    # Get all games for filtering
+    q = f"""
+    select 
+        t.teamname
+        ,g.*
+    from games g
+    left join teams t
+    on g.tm_teamid = t.teamid
+    where season = {season}
+    """
+    games = readSql(q)
 
-# %%
-total_rows = len(df)
-# Function to get sum of opponent state prior to the give row's date
-def opp_stats(row):
-    "Removes the team's games from the data, and duplicates by number of games v opp"
+    log.info("Executed sql")
 
-    if (row.name + 1) % 500 == 0:
-        print(f"{(row.name + 1) / total_rows:.2%}")
+    # Get predate opponent stats
+    total_rows = len(df)
 
-    # Get list of all opponents (includes duplicate values)
-    opp_list = games.loc[
-        (games["date"] < row["date"]) & (games["tm_teamid"] == row["tm_teamid"])
-    ]["opp_teamid"].to_list()
+    # Function to get sum of opponent state prior to the give row's date
+    def opp_stats(row: pd.Series):
+        "Removes the team's games from the data, and duplicates by number of games v opp"
 
-    # Create DF of opponents-counts combinations, merge into all games by said opps
-    opp_df = pd.DataFrame(Counter(opp_list).items(), columns=["tm_teamid", "n"])
-    opp_predate_games = games.loc[
-        (games["date"] < row["date"])
-        & (games["tm_teamid"].isin(opp_list))
-        & (games["opp_teamid"] != row["tm_teamid"])
-    ].merge(opp_df, how="left", on="tm_teamid")
-    # Duplicate games per number of times they were played, get stats
-    opp_predate_stats = opp_predate_games.loc[
-        opp_predate_games.index.repeat(opp_predate_games["n"])
-    ][metric_cols + nonmetric_cols].sum()
+        if (row.name + 1) % 10000 == 0:
+            log.info(f"Progress in apply: {(row.name + 1) / total_rows:.2%}")
 
-    return opp_predate_stats
+        # Get list of all opponents (includes duplicate values)
+        opp_list = games.loc[
+            (games["date"] < row["date"]) & (games["tm_teamid"] == row["tm_teamid"])
+        ]["opp_teamid"].to_list()
 
+        # Create DF of opponents-counts combinations, merge into all games by said opps
+        opp_df = pd.DataFrame(Counter(opp_list).items(), columns=["tm_teamid", "n"])
+        opp_predate_games = games.loc[
+            (games["date"] < row["date"])
+            & (games["tm_teamid"].isin(opp_list))
+            & (games["opp_teamid"] != row["tm_teamid"])
+        ].merge(opp_df, how="left", on="tm_teamid")
+        # Duplicate games per number of times they were played, get stats
+        opp_predate_stats = opp_predate_games.loc[
+            opp_predate_games.index.repeat(opp_predate_games["n"])
+        ][metric_cols].sum()
 
-df[[f"opp_{x}" for x in metric_cols + nonmetric_cols]] = df.apply(
-    lambda row: opp_stats(row), axis=1
-)
+        return opp_predate_stats
 
+    df[[f"opp_{x}" for x in metric_cols]] = df.apply(lambda row: opp_stats(row), axis=1)
 
-# normalize the team metrics
-for m in metric_list:
-    for prefix in ["tm", "opp"]:
-        for norm in ["poss"]:
-            if norm == m:
-                continue
-            df[f"{prefix}_{m}_p{norm}"] = df[f"{prefix}_{m}"] / df[f"{prefix}_{norm}"]
-            del df[f"{prefix}_{m}"]
-            # print(f"{prefix}_{m}_p{norm}")
-
-# NORMALIZE OPPONENT metrics
-for m in metric_list:
-    for prefix in ["tm", "opp"]:
-        for norm in ["poss"]:
-            if norm == m:
-                continue
-            df[f"opp_{prefix}_{m}_p{norm}"] = (
-                df[f"opp_{prefix}_{m}"] / df[f"opp_{prefix}_{norm}"]
-            )
-            del df[f"opp_{prefix}_{m}"]
-
-# Get opponent-adjusted values
-for m in metric_list:
-    for prefix in ["tm", "opp"]:
-        for norm in ["poss"]:
-            if norm == m:
-                continue
-
-            df[f"oa_{prefix}_{m}_p{norm}"] = (
-                df[f"{prefix}_{m}_p{norm}"]
-                - df[f"opp_{OTHERPREFIXMAP[prefix]}_{m}_p{norm}"]
-            )
-
-
-# %% Save to database
-# Remove extra columns
-oa_cols = [x for x in df.columns if (fnmatch(x, "opp_tm_*") or fnmatch(x, "opp_opp_*"))]
-opp_nonmetric_cols = [f"opp_{nonmetric}" for nonmetric in nonmetric_list]
-for col in (
-    [
-        "teamname",
+    # Add output metrics to df
+    # Pre-create columns for performance warning reasons
+    output_metric_cols = [
+        f"{t}{p}_{m}"
+        for m in OUTPUT_METRIC_DICT.keys()
+        for p in ["tm", "opp"]
+        for t in ["", "oa_", "rnk_", "rnk_oa_"]
     ]
-    + oa_cols
-    + opp_nonmetric_cols
-):
-    del df[col]
 
-# Rename
-renames = {}
-for col in nonmetric_list:
-    renames[f"tm_{col}"] = col
-df.rename(columns=renames, inplace=True)
+    df = pd.concat([df, pd.DataFrame(columns=output_metric_cols)], axis=1)
 
-# Add custom columns # TODO need to OA these in above process
-for prefix in ["tm", "opp"]:
-    df[f"{prefix}_ft_pct"] = df[f"{prefix}_ftm_pposs"] / df[f"{prefix}_fta_pposs"]
-    df[f"{prefix}_fg_pct"] = df[f"{prefix}_fgm_pposs"] / df[f"{prefix}_fga_pposs"]
-    df[f"{prefix}_fg2_pct"] = df[f"{prefix}_fgm2_pposs"] / df[f"{prefix}_fga2_pposs"]
-    df[f"{prefix}_fg3_pct"] = df[f"{prefix}_fgm3_pposs"] / df[f"{prefix}_fga3_pposs"]
+    output_metrics = []
+    for metric, metric_details in OUTPUT_METRIC_DICT.items():
+        log.debug(metric)
+        for prefix in ["tm", "opp"]:
+            output_metrics += [
+                f"{prefix}_{metric}",
+                f"oa_{prefix}_{metric}",
+                f"rnk_{prefix}_{metric}",
+                f"rnk_oa_{prefix}_{metric}",
+            ]
+            # Ascending metrics get flipped for the opponent's acumen at them
+            calc_ascending = metric_details["ascending"]
+            if prefix == "opp":
+                calc_ascending = not calc_ascending
+
+            # Get metric, OA metric
+            df[f"{prefix}_{metric}"] = (
+                df[f"{prefix}_{metric_details['num_col']}"]
+                / df[f"{prefix}_{metric_details['den_col']}"]
+            )
+            df[f"oa_{prefix}_{metric}"] = df[f"{prefix}_{metric}"] - (
+                df[f"opp_{OTHERPREFIXMAP[prefix]}_{metric_details['num_col']}"]
+                / df[f"opp_{OTHERPREFIXMAP[prefix]}_{metric_details['den_col']}"]
+            )
+
+            # Round to 6 decimals
+            df[f"{prefix}_{metric}"] = np.round(df[f"{prefix}_{metric}"], 6)
+            df[f"oa_{prefix}_{metric}"] = np.round(df[f"oa_{prefix}_{metric}"], 6)
+
+            # Rank
+            df[f"rnk_{prefix}_{metric}"] = df.groupby(["date"])[
+                f"{prefix}_{metric}"
+            ].rank(ascending=calc_ascending, method="min")
+            df[f"rnk_oa_{prefix}_{metric}"] = df.groupby(["date"])[
+                f"oa_{prefix}_{metric}"
+            ].rank(ascending=calc_ascending, method="min")
+
+    # Trim to final columns
+    out_first_cols = [
+        "teamid",
+        "game",
+        "win",
+        "loss",
+        "poss",
+        "mins",
+    ]
+    renames = {}
+    for col in out_first_cols:
+        renames[f"tm_{col}"] = col
+    df.rename(columns=renames, inplace=True)
+
+    out = df[["season", "date"] + out_first_cols + output_metric_cols]
+
+    return out
+
 
 # %%
-import plotly.express as px
+if __name__ == "__main__":
 
-px.line(df, x="date", y=["tm_margin_pposs", "oa_tm_margin_pposs"], color="teamid")
-# %%
-teamdata = games.loc[games["teamname"] == "Florida"].merge(
-    df, how="left", on=["season", "date", "teamname", "tm_teamid"]
-)
+    # Drop old table
+    q = "drop table if exists teamdates"
+    executeSql(q, "ncaa.db")
+
+    # Loop through seasons in games
+    for season in readSql("select distinct season from games")["season"]:
+        log.info(f"{season} season")
+        df = get_teamdates(season=season)
+
+        dfToTable(
+            df,
+            table="teamdates",
+            db="ncaa.db",
+            ifExists="append",
+            indexCols=["season", "date", "teamid"],
+        )
+
 # %%

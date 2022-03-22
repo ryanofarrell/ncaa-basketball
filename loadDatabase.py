@@ -11,7 +11,6 @@ OTHERPREFIXMAP = {"tm": "opp", "opp": "tm"}
 
 # %%
 if __name__ == "__main__":
-    files = os.listdir("./data")
 
     # Read on data
     games = pd.read_csv("./data/MRegularSeasonDetailedResults.csv")
@@ -77,12 +76,13 @@ if __name__ == "__main__":
         games[f"{prefix}_fga2"] = games[f"{prefix}_fga"] - games[f"{prefix}_fga3"]
         games[f"{prefix}_fgm2"] = games[f"{prefix}_fgm"] - games[f"{prefix}_fgm3"]
         games[f"{prefix}_tr"] = games[f"{prefix}_or"] + games[f"{prefix}_dr"]
-        games[f"{prefix}_game"] = 1
         games[f"{prefix}_mins"] = games[f"{prefix}_mins"] = 40 + games["num_ot"] * 5
+        games[f"{prefix}_game"] = 1
         games[f"{prefix}_win"] = 1 * (
             games[f"{prefix}_pts"] > games[f"{OTHERPREFIXMAP[prefix]}_pts"]
         )
-        games[f"{prefix}_rsgame"] = 1
+        games[f"{prefix}_loss"] = games[f"{prefix}_game"] - games[f"{prefix}_win"]
+        # games[f"{prefix}_rsgame"] = 1
         games[f"{prefix}_poss"] = (
             (
                 games["tm_fga"]
@@ -101,7 +101,12 @@ if __name__ == "__main__":
                 + games["opp_to"]
             )
         ) * 0.5
-        games[f"{prefix}_margin"] = games[f"{prefix}_pts"] - games[f"{OTHERPREFIXMAP[prefix]}_pts"]
+        games[f"{prefix}_margin"] = (
+            games[f"{prefix}_pts"] - games[f"{OTHERPREFIXMAP[prefix]}_pts"]
+        )
+        games[f"{prefix}_availor"] = (
+            games[f"{prefix}_or"] + games[f"{OTHERPREFIXMAP[prefix]}_dr"]
+        )
     del games["num_ot"]
 
     # Duplicate and rename
@@ -142,5 +147,15 @@ if __name__ == "__main__":
         ifExists="replace",
         indexCols=["season", "date", "game_key", "tm_teamid"],
     )
+
+    # Create calendar table of dates
+    cal = pd.DataFrame(
+        {
+            "date": pd.date_range(
+                games["date"].min(), games["date"].max(), freq="D"
+            ).strftime("%Y-%m-%d")
+        }
+    )
+    dfToTable(cal, "calendar", "ncaa.db", ifExists="replace", indexCols=["date"])
 
 # %%
