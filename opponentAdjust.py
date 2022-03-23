@@ -2,7 +2,14 @@
 from typing import Counter
 
 import numpy as np
-from helpers import dfToTable, executeSql, getRelativeFp, readSql, logger
+from helpers import (
+    dfToTable,
+    executeSql,
+    get_unique_permutations,
+    getRelativeFp,
+    readSql,
+    logger,
+)
 import pandas as pd
 
 
@@ -248,6 +255,8 @@ if __name__ == "__main__":
     q = "drop table if exists teamdates"
     executeSql(q, "ncaa.db")
 
+    # Create table
+
     # Loop through seasons in games
     for season in readSql("select distinct season from games")["season"]:
         log.info(f"{season} season")
@@ -261,4 +270,8 @@ if __name__ == "__main__":
             indexCols=["season", "date", "teamid"],
         )
 
+    for p in get_unique_permutations(["season", "date", "teamid"]):
+        executeSql(
+            f"CREATE INDEX teamdates_{'_'.join(p)} on teamdates ({', '.join(p)})"
+        )
 # %%

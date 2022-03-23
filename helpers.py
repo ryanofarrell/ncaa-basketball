@@ -1,4 +1,5 @@
 # %% imports
+from itertools import permutations
 import sqlite3 as sq
 
 import pandas as pd
@@ -162,3 +163,12 @@ def getRelativeFp(fileDunder, pathToAppend):
         os.makedirs(fpParent)
         print(f"Created directory {fpParent}")
     return newFilePath
+
+
+def get_unique_permutations(cols):
+    perms = []
+    for i in range(len(cols)):
+        perms += ["|".join(sorted(x)) for x in permutations(cols, i)]
+    perms = [x.split("|") for x in list(set(perms)) if x != ""]
+
+    return perms

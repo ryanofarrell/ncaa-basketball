@@ -1,6 +1,14 @@
 # %% Imports
 from datetime import timedelta
-from helpers import dfToTable, readSql
+from itertools import permutations
+from helpers import (
+    dfToTable,
+    executeSql,
+    get_unique_permutations,
+    getRelativeFp,
+    logger,
+    readSql,
+)
 import os
 import pandas as pd
 from fnmatch import fnmatch
@@ -9,21 +17,81 @@ import numpy as np
 # %% CONSTANTS
 OTHERPREFIXMAP = {"tm": "opp", "opp": "tm"}
 
-# %%
-if __name__ == "__main__":
+# %% Logging
+log = logger(
+    fp=getRelativeFp(__file__, f"logs/loadDatabase.log"),
+    fileLevel=10,
+    consoleLevel=20,
+)
+
+# %% Load calendar
+@log.timeFuncInfo
+def load_calendar():
+    "Relies on games to be loaded into database"
+
+    q = """
+    select
+        season
+        ,min(date) as min
+        ,max(date) as max
+    from games
+    group by season
+    """
+    seasonGameDates = readSql(q)
+    season_list: list[int] = []
+    dates: list[str] = []
+    day_nums: list[int] = []
+    for seas, series in seasonGameDates.iterrows():
+        season_dates = list(
+            pd.date_range(series["min"], series["max"], freq="D").strftime("%Y-%m-%d")
+        )
+        dates += season_dates
+        season_list += [seas] * len(season_dates)
+        day_nums += [x + 1 for x in range(len(season_dates))]
+    cal = pd.DataFrame({"season": season_list, "date": dates, "day_num": day_nums})
+
+    # drop old, make table, add indexe, load data
+    executeSql("drop table if exists calendar")
+    q = f"""
+    create table calendar (
+        season integer not null,
+        date TEXT not null,
+        day_num integer not null,
+        primary key (season asc, date asc)
+    )
+    """
+    executeSql(q)
+    for p in get_unique_permutations(cal.columns):
+        executeSql(f"CREATE INDEX calendar_{'_'.join(p)} ON calendar ({', '.join(p)})")
+    dfToTable(cal, "calendar", "ncaa.db", ifExists="append")
+
+
+# %% Load teams
+@log.timeFuncInfo
+def load_teams():
+    "No dependencies"
+
+    teams = pd.read_csv("./data/MTeams.csv")
+    teams.columns = [x.lower() for x in teams.columns]
+    # Load teams into db
+    dfToTable(teams, "teams", "ncaa.db", "replace")
+    for p in get_unique_permutations(['teamid','teamname']):
+        executeSql(f"CREATE INDEX teams_{'_'.join(p)} ON teams ({', '.join(p)})")
+
+
+
+# %% Load games
+@log.timeFuncInfo
+def load_games():
+    "Depends on teams"
 
     # Read on data
-    games = pd.read_csv("./data/MRegularSeasonDetailedResults.csv")
     seasons = pd.read_csv("./data/MSeasons.csv")
-    teams = pd.read_csv("./data/MTeams.csv")
+    games = pd.read_csv("./data/MRegularSeasonDetailedResults.csv")
 
     # Normalize col names
     games.columns = [x.lower() for x in games.columns]
     seasons.columns = [x.lower() for x in seasons.columns]
-    teams.columns = [x.lower() for x in teams.columns]
-
-    # Load teams into db
-    dfToTable(teams, "teams", "ncaa.db", "replace", ["teamid"])
 
     # Get dame dates
     seasons["dayzero"] = pd.to_datetime(seasons["dayzero"])
@@ -64,6 +132,7 @@ if __name__ == "__main__":
     )
 
     # Add game key
+    teams = readSql("select * from teams")
     teams_dict = {}
     for idx, row in teams.iterrows():
         teams_dict[row["teamid"]] = row["teamname"]
@@ -125,37 +194,60 @@ if __name__ == "__main__":
 
     # Reorder columns for easier analysis
     first_cols = [
-        "season",
         "date",
+        "season",
         "game_key",
         "tm_teamid",
         "opp_teamid",
+        "tm_loc",
+        "opp_loc",
         "tm_pts",
         "opp_pts",
     ]
-    games = games[
-        first_cols + sorted([x for x in games.columns if x not in first_cols])
-    ]
+    remainder_cols = sorted([x for x in games.columns if x not in first_cols])
+    games = games[first_cols + remainder_cols]
 
     # TODO add postseason
 
-    # create database
+    # Drop old, set up new, add indexes, load data
+    executeSql("drop table if exists games")
+    q = f"""
+    create table games (
+        season integer not null,
+        date TEXT not null,
+        game_key TEXT not null,
+        tm_teamid integer not null,
+        opp_teamid integer not null,
+        tm_loc string not null,
+        opp_loc string not null,
+        tm_pts integer not null,
+        opp_pts integer not null,
+        {' integer not null, '.join(remainder_cols)} integer not null,
+        primary key (season, date asc, game_key asc, tm_teamid asc)
+    )
+    """
+    executeSql(q)
+
+    perms = get_unique_permutations(
+        ["date", "season", "game_key", "tm_teamid", "opp_teamid"]
+    )
+    log.info(f"Creating {len(perms)} indexes on games")
+    for p in perms:
+        executeSql(f"CREATE INDEX games_{'_'.join(p)} on games ({', '.join(p)})")
     dfToTable(
         games,
         table="games",
         db="ncaa.db",
-        ifExists="replace",
-        indexCols=["season", "date", "game_key", "tm_teamid"],
+        ifExists="append",
     )
 
-    # Create calendar table of dates
-    cal = pd.DataFrame(
-        {
-            "date": pd.date_range(
-                games["date"].min(), games["date"].max(), freq="D"
-            ).strftime("%Y-%m-%d")
-        }
-    )
-    dfToTable(cal, "calendar", "ncaa.db", ifExists="replace", indexCols=["date"])
+
+# %%
+if __name__ == "__main__":
+
+    # Handler
+    load_teams()
+    load_games()
+    load_calendar()
 
 # %%
