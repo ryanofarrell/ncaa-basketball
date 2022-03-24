@@ -1,6 +1,5 @@
 # %% Imports
 from datetime import timedelta
-from itertools import permutations
 from helpers import (
     dfToTable,
     executeSql,
@@ -75,9 +74,8 @@ def load_teams():
     teams.columns = [x.lower() for x in teams.columns]
     # Load teams into db
     dfToTable(teams, "teams", "ncaa.db", "replace")
-    for p in get_unique_permutations(['teamid','teamname']):
+    for p in get_unique_permutations(["teamid", "teamname"]):
         executeSql(f"CREATE INDEX teams_{'_'.join(p)} ON teams ({', '.join(p)})")
-
 
 
 # %% Load games
@@ -242,6 +240,93 @@ def load_games():
     )
 
 
+# %% Load vegas data
+def load_vegas():
+    season = 2014
+    df = pd.read_excel(
+        f"https://www.sportsbookreviewsonline.com/scoresoddsarchives/ncaabasketball/ncaa%20basketball%20{season - 1}-{str(season)[-2:]}.xlsx"
+    )
+    df.columns = [x.lower() for x in df.columns]
+
+    # Drop bad dates - date must be >100
+    pre_drop_len = len(df)
+    bad_dates = df["date"] < 100
+    print(f"Dropping {sum(bad_dates) * 2:,.0f} bad dated records")
+    idx_to_drop = []
+    for idx, _ in df.loc[bad_dates].iterrows():
+        idx_to_drop.append(idx)
+        if idx % 2 == 1:  # If odd, drop even number prior
+            idx_to_drop.append(idx - 1)
+        else:  # If even, drop next number
+            idx_to_drop.append(idx + 1)
+    df = df.drop(idx_to_drop).reset_index(drop=True)
+    assert len(df) == pre_drop_len - sum(bad_dates) * 2, "missing a date or two"
+
+    # Parse date from integer date column
+    df[["mo", "dy"]] = df["date"].apply(lambda x: [str(x)[:-2], str(x)[-2:]]).to_list()
+    df["year"] = np.where(df["mo"].astype(int) < 7, str(season), str(season - 1))
+    df["date"] = pd.to_datetime(
+        df["year"] + "-" + df["mo"] + "-" + df["dy"]
+    ).dt.strftime("%Y-%m-%d")
+    df.drop(inplace=True, labels=["year", "mo", "dy"], axis=1)
+
+    # Self-join to get all game data in one row
+    df = pd.merge(
+        df.iloc[[x for x in df.index if x % 2 == 0]].reset_index(drop=True),
+        df.iloc[[x for x in df.index if x % 2 == 1]].reset_index(drop=True),
+        left_index=True,
+        right_index=True,
+        suffixes=["_tm", "_opp"],
+    )
+    assert (df["date_tm"] == df["date_opp"]).all(), "Mismatch dates"
+    assert np.abs((df["rot_tm"] - df["rot_opp"])).max() == 1, "Mismatch rots"
+
+    # remove unused rows, rename some things
+    df.drop(
+        ["date_opp", "rot_tm", "rot_opp"]
+        + [f"{x}_{y}" for y in ["tm", "opp"] for x in ["1st", "2nd", "2h"]],
+        axis=1,
+        inplace=True,
+    )
+
+    # Get team IDs
+    ts = pd.read_csv("data/MTeamSpellings.csv", sep=",", encoding="cp1252")
+    ts.columns = [x.lower() for x in ts.columns]
+    ts["teamnamespelling_nospace"] = ts["teamnamespelling"].str.replace(" ", "")
+    for col in ["team_tm", "team_opp"]:
+        df[col] = df[col].str.lower()
+        df[col] = df[col].str.replace(".", "", regex=False)
+        df[col] = df[col].str.replace("\xa0", "", regex=False)
+
+    df = (
+        pd.merge(
+            df,
+            ts[["teamnamespelling_nospace", "teamid"]],
+            left_on=["team_tm"],
+            right_on=["teamnamespelling_nospace"],
+            how="left",
+        )
+        .rename(columns={"teamid": "tm_teamid"})
+        .drop(["teamnamespelling_nospace"], axis=1)
+        .merge(
+            ts[["teamnamespelling_nospace", "teamid"]],
+            left_on=["team_opp"],
+            right_on=["teamnamespelling_nospace"],
+            how="left",
+        )
+        .rename(columns={"teamid": "opp_teamid"})
+        .drop(["teamnamespelling_nospace"], axis=1)
+    )
+    sorted(
+        list(
+            set(
+                list(df.loc[pd.isna(df["tm_teamid"])]["team_tm"].unique())
+                + list(df.loc[pd.isna(df["opp_teamid"])]["team_opp"].unique())
+            )
+        )
+    )
+
+
 # %%
 if __name__ == "__main__":
 
@@ -249,5 +334,3 @@ if __name__ == "__main__":
     load_teams()
     load_games()
     load_calendar()
-
-# %%
