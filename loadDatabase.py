@@ -220,7 +220,7 @@ def load_games():
         opp_loc string not null,
         tm_pts integer not null,
         opp_pts integer not null,
-        {' integer not null, '.join(remainder_cols)} integer not null,
+        {' real not null, '.join(remainder_cols)} real not null,
         primary key (season, date asc, game_key asc, tm_teamid asc)
     )
     """
