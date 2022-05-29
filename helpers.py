@@ -151,6 +151,21 @@ class logger:
 
         return decorated
 
+    def timeFuncDebug(self, fn):
+        @functools.wraps(fn)
+        def decorated(*args, **kwargs):
+            try:
+                now = dt.now()
+                logging.debug(f"Fn | {fn.__name__} | Begin")
+                result = fn(*args, **kwargs)
+                logging.debug(f"Fn | {fn.__name__} | Complete | {dt.now() - now}")
+                return result
+            except Exception as ex:
+                logging.critical(f"Exception {ex}")
+                raise ex
+
+        return decorated
+
 
 def getRelativeFp(fileDunder, pathToAppend):
     import os
