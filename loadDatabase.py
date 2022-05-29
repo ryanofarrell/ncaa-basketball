@@ -240,9 +240,8 @@ def load_games():
     )
 
 
-# %% Load vegas data
-def load_vegas():
-    season = 2014
+# %% Scrape single vegas season
+def single_season_vegas_load(season: int):
     df = pd.read_excel(
         f"https://www.sportsbookreviewsonline.com/scoresoddsarchives/ncaabasketball/ncaa%20basketball%20{season - 1}-{str(season)[-2:]}.xlsx"
     )
@@ -288,11 +287,13 @@ def load_vegas():
         axis=1,
         inplace=True,
     )
+    df.rename(columns={"date_tm": "date"}, inplace=True)
 
     # Get team IDs
     ts = pd.read_csv("data/MTeamSpellings.csv", sep=",", encoding="cp1252")
     ts.columns = [x.lower() for x in ts.columns]
     ts["teamnamespelling_nospace"] = ts["teamnamespelling"].str.replace(" ", "")
+    ts = ts.groupby(["teamid", "teamnamespelling_nospace"]).size().reset_index()
     for col in ["team_tm", "team_opp"]:
         df[col] = df[col].str.lower()
         df[col] = df[col].str.replace(".", "", regex=False)
@@ -317,6 +318,7 @@ def load_vegas():
         .rename(columns={"teamid": "opp_teamid"})
         .drop(["teamnamespelling_nospace"], axis=1)
     )
+    # TODO handle this
     sorted(
         list(
             set(
@@ -325,6 +327,220 @@ def load_vegas():
             )
         )
     )
+
+    # Drop missing teams
+    preLen = len(df)
+    df = df.loc[(~pd.isna(df["tm_teamid"])) & (~pd.isna(df["opp_teamid"]))].reset_index(
+        drop=True
+    )
+    print(
+        f"Dropped {preLen - len(df)} records due to missing names {(preLen - len(df)) / preLen:.2%}"
+    )
+
+    # Figure out open and close
+    for col in ["open_tm", "close_tm", "open_opp", "close_opp"]:
+        df[col] = np.where(df[col] == "pk", 0, df[col])
+
+    # Drop the NL values (no line)
+    preLen = len(df)
+    df = df.loc[
+        ~(df[["open_tm", "close_tm", "open_opp", "close_opp"]] == "NL").any(axis=1)
+    ].reset_index(drop=True)
+    print(
+        f"Dropped {preLen - len(df)} records due to NL vals {(preLen - len(df)) / preLen:.2%}"
+    )
+
+    def get_line(r):
+        "tm openline, tm_closeline, game_open_ou, game_close_ou, tm_ml, opp_ml"
+
+        def _is_line(val):
+            try:
+                return 0 <= val <= 50
+            except TypeError:
+                print(val)
+                raise TypeError()
+                # return False
+
+        def _nones():
+            return tuple([None] * 6)
+
+        if r["ml_tm"] == "NL":
+            tm_ml = None
+        else:
+            tm_ml = r["ml_tm"]
+        if r["ml_opp"] == "NL":
+            opp_ml = None
+        else:
+            opp_ml = r["ml_opp"]
+
+        # Scenario 1: opp is favored both open and close
+        if _is_line(r["open_opp"]) and _is_line(r["close_opp"]):
+            if _is_line(r["open_tm"]) or _is_line(r["close_tm"]):
+                print(r)
+                return _nones()
+            return (
+                r["open_opp"],
+                r["close_opp"],
+                r["open_tm"],
+                r["close_tm"],
+                tm_ml,
+                opp_ml,
+            )
+        # Scenario 2: tm is favored in both open and close
+        if _is_line(r["open_tm"]) and _is_line(r["close_tm"]):
+            if _is_line(r["open_opp"]) or _is_line(r["close_opp"]):
+                print(r)
+                return _nones()
+
+            return (
+                -r["open_tm"],
+                -r["close_tm"],
+                r["open_opp"],
+                r["close_opp"],
+                tm_ml,
+                opp_ml,
+            )
+        # Scenario 3: tm is favored open, but dog in close
+        if _is_line(r["open_tm"]) and _is_line(r["close_opp"]):
+            if _is_line(r["open_opp"]) or _is_line(r["close_tm"]):
+                print(r)
+                return _nones()
+
+            return (
+                -r["open_tm"],
+                r["close_opp"],
+                r["open_opp"],
+                r["close_tm"],
+                tm_ml,
+                opp_ml,
+            )
+
+        # Scenario 4: tm is dog open, but favored in close
+        if _is_line(r["open_opp"]) and _is_line(r["close_tm"]):
+            if _is_line(r["open_tm"]) or _is_line(r["close_opp"]):
+                print(r)
+                return _nones()
+
+            return (
+                r["open_opp"],
+                -r["close_tm"],
+                r["open_tm"],
+                r["close_opp"],
+                tm_ml,
+                opp_ml,
+            )
+
+        print(r)
+        raise ValueError("Not yet handled")
+
+    df[
+        [
+            "tm_openline",
+            "tm_closeline",
+            "game_openou",
+            "game_closeou",
+            "tm_ml",
+            "opp_ml",
+        ]
+    ] = df.apply(lambda x: get_line(x), axis=1).to_list()
+
+    for col in [
+        "tm_openline",
+        "tm_closeline",
+        "game_openou",
+        "game_closeou",
+        "tm_ml",
+        "opp_ml",
+    ]:
+        df[col] = df[col].astype(float, errors="ignore")
+
+    # Bring together to games
+    games = readSql(f"select * from games where season = {season}")
+    df = pd.merge(
+        df,
+        games[["date", "tm_teamid", "opp_teamid", "season", "game_key"]],
+        how="left",
+        on=["date", "tm_teamid", "opp_teamid"],
+    )
+
+    preLen = len(df)
+    df = df.loc[~pd.isna(df["game_key"])].reset_index(drop=True)
+    print(
+        f"Dropped {preLen - len(df)} records due to no matching game {(preLen - len(df)) / preLen:.2%}"
+    )
+
+    # Duplicate for database
+    dup = df.copy()
+    dup.rename(
+        columns={
+            "tm_ml": "opp_ml",
+            "opp_ml": "tm_ml",
+            "tm_teamid": "opp_teamid",
+            "opp_teamid": "tm_teamid",
+        },
+        inplace=True,
+    )
+    dup["tm_openline"] *= -1
+    dup["tm_closeline"] *= -1
+    df = pd.concat([df, dup], ignore_index=True)
+    df = df.sort_values(by=["date", "game_key", "tm_teamid"]).reset_index(drop=True)
+
+    df = df[
+        [
+            "season",
+            "date",
+            "game_key",
+            "tm_teamid",
+            "opp_teamid",
+            "tm_openline",
+            "tm_closeline",
+            "tm_ml",
+            "opp_ml",
+            "game_openou",
+            "game_closeou",
+        ]
+    ]
+    return df
+
+
+# %% Scrape all vegas seasons
+def load_vegas():
+
+    executeSql("drop table if exists vegas_lines")
+    q = f"""
+    create table vegas_lines (
+        season integer not null,
+        date TEXT not null,
+        game_key TEXT not null,
+        tm_teamid integer not null,
+        opp_teamid integer not null,
+        tm_openline real,
+        tm_closeline real,
+        tm_ml real,
+        opp_ml real,
+        game_openou real,
+        game_closeou real,
+
+        primary key (season, date asc, game_key asc, tm_teamid asc)
+    )
+    """
+    executeSql(q)
+    perms = get_unique_permutations(
+        ["date", "season", "game_key", "tm_teamid", "opp_teamid"]
+    )
+    log.info(f"Creating {len(perms)} indexes on vegas_lines")
+    for p in perms:
+        executeSql(f"CREATE INDEX vegas_{'_'.join(p)} on vegas_lines ({', '.join(p)})")
+
+    for season in range(2008, 2023):
+        print(season)
+        df = single_season_vegas_load(season)
+        dfToTable(
+            df,
+            table="vegas_lines",
+            db="ncaa.db",
+            ifExists="append",
+        )
 
 
 # %%
