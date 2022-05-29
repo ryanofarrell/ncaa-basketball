@@ -1,5 +1,6 @@
 # %% Imports
 from datetime import timedelta
+from typing import Literal
 from helpers import (
     dfToTable,
     executeSql,
@@ -241,6 +242,7 @@ def load_games():
 
 
 # %% Scrape single vegas season
+@log.timeFuncDebug
 def single_season_vegas_load(season: int):
     df = pd.read_excel(
         f"https://www.sportsbookreviewsonline.com/scoresoddsarchives/ncaabasketball/ncaa%20basketball%20{season - 1}-{str(season)[-2:]}.xlsx"
@@ -250,7 +252,7 @@ def single_season_vegas_load(season: int):
     # Drop bad dates - date must be >100
     pre_drop_len = len(df)
     bad_dates = df["date"] < 100
-    print(f"Dropping {sum(bad_dates) * 2:,.0f} bad dated records")
+    log.debug(f"Dropping {sum(bad_dates) * 2:,.0f} bad dated records")
     idx_to_drop = []
     for idx, _ in df.loc[bad_dates].iterrows():
         idx_to_drop.append(idx)
@@ -277,6 +279,11 @@ def single_season_vegas_load(season: int):
         right_index=True,
         suffixes=["_tm", "_opp"],
     )
+    preLen = len(df)
+    df = df.loc[df["date_tm"] == df["date_opp"]].reset_index(drop=True)
+    df = df.loc[np.abs((df["rot_tm"] - df["rot_opp"])) == 1].reset_index(drop=True)
+    if len(df) != preLen:
+        log.debug(f"Dropped {preLen-len(df)} records due to date mismatch")
     assert (df["date_tm"] == df["date_opp"]).all(), "Mismatch dates"
     assert np.abs((df["rot_tm"] - df["rot_opp"])).max() == 1, "Mismatch rots"
 
@@ -333,36 +340,38 @@ def single_season_vegas_load(season: int):
     df = df.loc[(~pd.isna(df["tm_teamid"])) & (~pd.isna(df["opp_teamid"]))].reset_index(
         drop=True
     )
-    print(
+    log.debug(
         f"Dropped {preLen - len(df)} records due to missing names {(preLen - len(df)) / preLen:.2%}"
     )
 
     # Figure out open and close
     for col in ["open_tm", "close_tm", "open_opp", "close_opp"]:
-        df[col] = np.where(df[col] == "pk", 0, df[col])
+        df[col] = np.where(df[col].str.lower().isin(["pk", "p"]), 0, df[col])
 
     # Drop the NL values (no line)
-    preLen = len(df)
-    df = df.loc[
-        ~(df[["open_tm", "close_tm", "open_opp", "close_opp"]] == "NL").any(axis=1)
-    ].reset_index(drop=True)
-    print(
-        f"Dropped {preLen - len(df)} records due to NL vals {(preLen - len(df)) / preLen:.2%}"
-    )
+    # preLen = len(df)
+    # df = df.loc[
+    #     ~(df[["open_tm", "close_tm", "open_opp", "close_opp"]] == "NL").any(axis=1)
+    # ].reset_index(drop=True)
+    # print(
+    #     f"Dropped {preLen - len(df)} records due to NL vals {(preLen - len(df)) / preLen:.2%}"
+    # )
 
     def get_line(r):
         "tm openline, tm_closeline, game_open_ou, game_close_ou, tm_ml, opp_ml"
 
-        def _is_line(val):
-            try:
-                return 0 <= val <= 50
-            except TypeError:
-                print(val)
-                raise TypeError()
-                # return False
-
-        def _nones():
-            return tuple([None] * 6)
+        def _get_val_type(val: str | float) -> Literal["line", "ou", "NL"]:
+            if isinstance(val, str):
+                if val.strip() == "NL":
+                    return "NL"
+                # print(r)
+                return "NL"
+                # raise ValueError(val)
+            if 0 <= val <= 70:
+                return "line"
+            if val > 70:
+                return "ou"
+            return "NL"
 
         if r["ml_tm"] == "NL":
             tm_ml = None
@@ -373,65 +382,79 @@ def single_season_vegas_load(season: int):
         else:
             opp_ml = r["ml_opp"]
 
-        # Scenario 1: opp is favored both open and close
-        if _is_line(r["open_opp"]) and _is_line(r["close_opp"]):
-            if _is_line(r["open_tm"]) or _is_line(r["close_tm"]):
+        types = (
+            (_get_val_type(r["open_tm"]), _get_val_type(r["open_opp"])),
+            (_get_val_type(r["close_tm"]), _get_val_type(r["close_opp"])),
+        )
+
+        # OU is on the side the favorite is
+        # Open open, close close, tm-opp
+        match types[0]:
+            case ("ou", "line"):
+                tm_openline = r["open_opp"]
+                game_openou = r["open_tm"]
+            case ("ou", "NL"):
+                tm_openline = None
+                game_openou = r["open_tm"]
+            case ("NL", "line"):
+                tm_openline = r["open_opp"]
+                game_openou = None
+            case ("line", "ou"):
+                tm_openline = -r["open_tm"]
+                game_openou = r["open_opp"]
+            case ("NL", "ou"):
+                tm_openline = None
+                game_openou = r["open_opp"]
+            case ("line", "NL"):
+                tm_openline = -r["open_tm"]
+                game_openou = None
+            case ("NL", "NL"):
+                tm_openline = None
+                game_openou = None
+            case ("line", "line"):
+                tm_openline = None
+                game_openou = None
+            case _:
                 print(r)
-                return _nones()
-            return (
-                r["open_opp"],
-                r["close_opp"],
-                r["open_tm"],
-                r["close_tm"],
-                tm_ml,
-                opp_ml,
-            )
-        # Scenario 2: tm is favored in both open and close
-        if _is_line(r["open_tm"]) and _is_line(r["close_tm"]):
-            if _is_line(r["open_opp"]) or _is_line(r["close_opp"]):
+                raise ValueError(types[0])
+
+        match types[1]:
+            case ("ou", "line"):
+                tm_closeline = r["close_opp"]
+                game_closeou = r["close_tm"]
+            case ("ou", "NL"):
+                tm_closeline = None
+                game_closeou = r["close_tm"]
+            case ("NL", "line"):
+                tm_closeline = r["close_opp"]
+                game_closeou = None
+            case ("line", "ou"):
+                tm_closeline = -r["close_tm"]
+                game_closeou = r["close_opp"]
+            case ("NL", "ou"):
+                tm_closeline = None
+                game_closeou = r["close_opp"]
+            case ("line", "NL"):
+                tm_closeline = -r["close_tm"]
+                game_closeou = None
+            case ("NL", "NL"):
+                tm_closeline = None
+                game_closeou = None
+            case ("ou", "ou"):
+                tm_closeline = None
+                game_closeou = None
+            case ("line", "line"):
+                tm_closeline = None
+                game_closeou = None
+
+            case _:
                 print(r)
-                return _nones()
+                raise ValueError(types[1])
 
-            return (
-                -r["open_tm"],
-                -r["close_tm"],
-                r["open_opp"],
-                r["close_opp"],
-                tm_ml,
-                opp_ml,
-            )
-        # Scenario 3: tm is favored open, but dog in close
-        if _is_line(r["open_tm"]) and _is_line(r["close_opp"]):
-            if _is_line(r["open_opp"]) or _is_line(r["close_tm"]):
-                print(r)
-                return _nones()
-
-            return (
-                -r["open_tm"],
-                r["close_opp"],
-                r["open_opp"],
-                r["close_tm"],
-                tm_ml,
-                opp_ml,
-            )
-
-        # Scenario 4: tm is dog open, but favored in close
-        if _is_line(r["open_opp"]) and _is_line(r["close_tm"]):
-            if _is_line(r["open_tm"]) or _is_line(r["close_opp"]):
-                print(r)
-                return _nones()
-
-            return (
-                r["open_opp"],
-                -r["close_tm"],
-                r["open_tm"],
-                r["close_opp"],
-                tm_ml,
-                opp_ml,
-            )
-
-        print(r)
-        raise ValueError("Not yet handled")
+        # assert max(np.abs(tm_openline), np.abs(tm_closeline)) < min(
+        #     game_closeou, game_openou
+        # )
+        return (tm_openline, tm_closeline, game_openou, game_closeou, tm_ml, opp_ml)
 
     df[
         [
@@ -465,7 +488,7 @@ def single_season_vegas_load(season: int):
 
     preLen = len(df)
     df = df.loc[~pd.isna(df["game_key"])].reset_index(drop=True)
-    print(
+    log.debug(
         f"Dropped {preLen - len(df)} records due to no matching game {(preLen - len(df)) / preLen:.2%}"
     )
 
@@ -504,6 +527,7 @@ def single_season_vegas_load(season: int):
 
 
 # %% Scrape all vegas seasons
+@log.timeFuncInfo
 def load_vegas():
 
     executeSql("drop table if exists vegas_lines")
@@ -533,7 +557,7 @@ def load_vegas():
         executeSql(f"CREATE INDEX vegas_{'_'.join(p)} on vegas_lines ({', '.join(p)})")
 
     for season in range(2008, 2023):
-        print(season)
+        log.info(season)
         df = single_season_vegas_load(season)
         dfToTable(
             df,
@@ -550,3 +574,6 @@ if __name__ == "__main__":
     load_teams()
     load_games()
     load_calendar()
+    load_vegas()
+
+# %%
