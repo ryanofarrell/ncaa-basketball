@@ -22,6 +22,7 @@ log = logger(
     fp=getRelativeFp(__file__, f"logs/loadDatabase.log"),
     fileLevel=10,
     consoleLevel=20,
+    removeOldFile=True,
 )
 
 # %% Load calendar
