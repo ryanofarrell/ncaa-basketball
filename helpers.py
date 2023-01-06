@@ -187,3 +187,22 @@ def get_unique_permutations(cols):
     perms = [x.split("|") for x in list(set(perms)) if x != ""]
 
     return perms
+
+
+# %% Query in-memory
+def qdf(df: pd.DataFrame, q: str):
+    with sq.connect(":memory:") as con:
+        df.to_sql(
+            name="self",
+            con=con,
+            if_exists="append",
+            method="multi",
+            chunksize=1000,
+        )
+
+        results = pd.read_sql(q, con)
+
+    return results
+
+
+# %%
