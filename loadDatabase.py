@@ -43,9 +43,7 @@ def load_calendar():
     dates: list[str] = []
     day_nums: list[int] = []
     for seas, series in seasonGameDates.iterrows():
-        season_dates = list(
-            pd.date_range(series["min"], series["max"], freq="D").strftime("%Y-%m-%d")
-        )
+        season_dates = list(pd.date_range(series["min"], series["max"], freq="D").strftime("%Y-%m-%d"))
         dates += season_dates
         season_list += [seas] * len(season_dates)
         day_nums += [x + 1 for x in range(len(season_dates))]
@@ -97,9 +95,7 @@ def load_games():
     seasons["dayzero"] = pd.to_datetime(seasons["dayzero"])
     games = games.merge(seasons[["season", "dayzero"]], on="season")
     games["date"] = games.apply(
-        lambda row: (row["dayzero"] + timedelta(days=row["daynum"])).strftime(
-            "%Y-%m-%d"
-        ),
+        lambda row: (row["dayzero"] + timedelta(days=row["daynum"])).strftime("%Y-%m-%d"),
         axis=1,
     )
     del games["dayzero"], games["daynum"]
@@ -127,18 +123,14 @@ def load_games():
         for prefix in ["w", "l"]:
             rename[f"{prefix}{col}"] = f"{rename_map[prefix]}_{col}"
     games.rename(columns=rename, inplace=True)
-    games["opp_loc"] = np.where(
-        games["tm_loc"] == "N", "N", np.where(games["tm_loc"] == "A", "H", "A")
-    )
+    games["opp_loc"] = np.where(games["tm_loc"] == "N", "N", np.where(games["tm_loc"] == "A", "H", "A"))
 
     # Add game key
     teams = readSql("select * from teams")
     teams_dict = {}
     for idx, row in teams.iterrows():
         teams_dict[row["teamid"]] = row["teamname"]
-    games["game_key"] = games.apply(
-        lambda x: f"{teams_dict[x['tm_teamid']]}>{teams_dict[x['opp_teamid']]}", axis=1
-    )
+    games["game_key"] = games.apply(lambda x: f"{teams_dict[x['tm_teamid']]}>{teams_dict[x['opp_teamid']]}", axis=1)
 
     # Add additional columns
     for prefix in ["tm", "opp"]:
@@ -147,35 +139,25 @@ def load_games():
         games[f"{prefix}_tr"] = games[f"{prefix}_or"] + games[f"{prefix}_dr"]
         games[f"{prefix}_mins"] = games[f"{prefix}_mins"] = 40 + games["num_ot"] * 5
         games[f"{prefix}_game"] = 1
-        games[f"{prefix}_win"] = 1 * (
-            games[f"{prefix}_pts"] > games[f"{OTHERPREFIXMAP[prefix]}_pts"]
-        )
+        games[f"{prefix}_win"] = 1 * (games[f"{prefix}_pts"] > games[f"{OTHERPREFIXMAP[prefix]}_pts"])
         games[f"{prefix}_loss"] = games[f"{prefix}_game"] - games[f"{prefix}_win"]
         # games[f"{prefix}_rsgame"] = 1
         games[f"{prefix}_poss"] = (
             (
                 games["tm_fga"]
                 + 0.4 * games["tm_fta"]
-                - 1.07
-                * (games["tm_or"] / (games["tm_or"] + games["opp_dr"]))
-                * (games["tm_fga"] - games["tm_fgm"])
+                - 1.07 * (games["tm_or"] / (games["tm_or"] + games["opp_dr"])) * (games["tm_fga"] - games["tm_fgm"])
                 + games["tm_to"]
             )
             + (
                 games["opp_fga"]
                 + 0.4 * games["opp_fta"]
-                - 1.07
-                * (games["opp_or"] / (games["opp_or"] + games["tm_dr"]))
-                * (games["opp_fga"] - games["opp_fgm"])
+                - 1.07 * (games["opp_or"] / (games["opp_or"] + games["tm_dr"])) * (games["opp_fga"] - games["opp_fgm"])
                 + games["opp_to"]
             )
         ) * 0.5
-        games[f"{prefix}_margin"] = (
-            games[f"{prefix}_pts"] - games[f"{OTHERPREFIXMAP[prefix]}_pts"]
-        )
-        games[f"{prefix}_availor"] = (
-            games[f"{prefix}_or"] + games[f"{OTHERPREFIXMAP[prefix]}_dr"]
-        )
+        games[f"{prefix}_margin"] = games[f"{prefix}_pts"] - games[f"{OTHERPREFIXMAP[prefix]}_pts"]
+        games[f"{prefix}_availor"] = games[f"{prefix}_or"] + games[f"{OTHERPREFIXMAP[prefix]}_dr"]
     del games["num_ot"]
 
     # Duplicate and rename
@@ -228,9 +210,7 @@ def load_games():
     """
     executeSql(q)
 
-    perms = get_unique_permutations(
-        ["date", "season", "game_key", "tm_teamid", "opp_teamid"]
-    )
+    perms = get_unique_permutations(["date", "season", "game_key", "tm_teamid", "opp_teamid"])
     log.info(f"Creating {len(perms)} indexes on games")
     for p in perms:
         executeSql(f"CREATE INDEX games_{'_'.join(p)} on games ({', '.join(p)})")
@@ -267,9 +247,7 @@ def single_season_vegas_load(season: int):
     # Parse date from integer date column
     df[["mo", "dy"]] = df["date"].apply(lambda x: [str(x)[:-2], str(x)[-2:]]).to_list()
     df["year"] = np.where(df["mo"].astype(int) < 7, str(season), str(season - 1))
-    df["date"] = pd.to_datetime(
-        df["year"] + "-" + df["mo"] + "-" + df["dy"]
-    ).dt.strftime("%Y-%m-%d")
+    df["date"] = pd.to_datetime(df["year"] + "-" + df["mo"] + "-" + df["dy"]).dt.strftime("%Y-%m-%d")
     df.drop(inplace=True, labels=["year", "mo", "dy"], axis=1)
 
     # Self-join to get all game data in one row
@@ -290,8 +268,7 @@ def single_season_vegas_load(season: int):
 
     # remove unused rows, rename some things
     df.drop(
-        ["date_opp", "rot_tm", "rot_opp"]
-        + [f"{x}_{y}" for y in ["tm", "opp"] for x in ["1st", "2nd", "2h"]],
+        ["date_opp", "rot_tm", "rot_opp"] + [f"{x}_{y}" for y in ["tm", "opp"] for x in ["1st", "2nd", "2h"]],
         axis=1,
         inplace=True,
     )
@@ -338,12 +315,8 @@ def single_season_vegas_load(season: int):
 
     # Drop missing teams
     preLen = len(df)
-    df = df.loc[(~pd.isna(df["tm_teamid"])) & (~pd.isna(df["opp_teamid"]))].reset_index(
-        drop=True
-    )
-    log.debug(
-        f"Dropped {preLen - len(df)} records due to missing names {(preLen - len(df)) / preLen:.2%}"
-    )
+    df = df.loc[(~pd.isna(df["tm_teamid"])) & (~pd.isna(df["opp_teamid"]))].reset_index(drop=True)
+    log.debug(f"Dropped {preLen - len(df)} records due to missing names {(preLen - len(df)) / preLen:.2%}")
 
     # Figure out open and close
     for col in ["open_tm", "close_tm", "open_opp", "close_opp"]:
@@ -489,9 +462,7 @@ def single_season_vegas_load(season: int):
 
     preLen = len(df)
     df = df.loc[~pd.isna(df["game_key"])].reset_index(drop=True)
-    log.debug(
-        f"Dropped {preLen - len(df)} records due to no matching game {(preLen - len(df)) / preLen:.2%}"
-    )
+    log.debug(f"Dropped {preLen - len(df)} records due to no matching game {(preLen - len(df)) / preLen:.2%}")
 
     # Duplicate for database
     dup = df.copy()
@@ -550,9 +521,7 @@ def load_vegas():
     )
     """
     executeSql(q)
-    perms = get_unique_permutations(
-        ["date", "season", "game_key", "tm_teamid", "opp_teamid"]
-    )
+    perms = get_unique_permutations(["date", "season", "game_key", "tm_teamid", "opp_teamid"])
     log.info(f"Creating {len(perms)} indexes on vegas_lines")
     for p in perms:
         executeSql(f"CREATE INDEX vegas_{'_'.join(p)} on vegas_lines ({', '.join(p)})")
