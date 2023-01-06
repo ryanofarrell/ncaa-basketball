@@ -7,6 +7,7 @@ import logging
 import os
 import functools
 from datetime import datetime as dt
+from typing import Literal
 
 
 def readSql(q: str, db: str = "ncaa.db") -> pd.DataFrame:
@@ -47,7 +48,7 @@ def dfToTable(
     df: pd.DataFrame,
     table: str,
     db: str,
-    ifExists: str = "replace",
+    ifExists: Literal["replace", "append", "fail"] = "replace",
     indexCols: list[str] | None = None,
 ) -> None:
     """Saves dataframe as table in sqlite3 database
@@ -98,12 +99,10 @@ def dfToTable(
 class logger:
     "Logger class"
 
-    def __init__(
-        self, fp, fileLevel, consoleLevel, removeOldFile=False, name="myCustomLogger"
-    ):
+    def __init__(self, fp, fileLevel, consoleLevel, removeOldFile=False, name="myCustomLogger"):
         format = "%(asctime)s | %(levelname)s | %(message)s"
         if consoleLevel < fileLevel:
-            print(f"Min level set in fileLevel; console will not go lower!")
+            print("Min level set in fileLevel; console will not go lower!")
 
         if removeOldFile:
             try:
