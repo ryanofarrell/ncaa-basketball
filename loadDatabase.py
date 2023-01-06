@@ -9,7 +9,6 @@ from helpers import (
     logger,
     readSql,
 )
-import os
 import pandas as pd
 from fnmatch import fnmatch
 import numpy as np
@@ -19,11 +18,12 @@ OTHERPREFIXMAP = {"tm": "opp", "opp": "tm"}
 
 # %% Logging
 log = logger(
-    fp=getRelativeFp(__file__, f"logs/loadDatabase.log"),
+    fp=getRelativeFp(__file__, "logs/loadDatabase.log"),
     fileLevel=10,
     consoleLevel=20,
     removeOldFile=True,
 )
+
 
 # %% Load calendar
 @log.timeFuncInfo
