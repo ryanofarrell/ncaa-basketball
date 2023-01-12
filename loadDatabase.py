@@ -96,7 +96,7 @@ def load_teams(replace_firestore: bool = False):
 
 # %% Load games
 @log.timeFuncInfo
-def load_games():
+def load_games(season: int | None = None, replace_firestore: bool = False):
     "Depends on teams"
 
     # Read on data
@@ -107,9 +107,12 @@ def load_games():
     games.columns = [x.lower() for x in games.columns]
     seasons.columns = [x.lower() for x in seasons.columns]
 
+    if season is not None:
+        games = games[games["season"] == season]
+
     # Get dame dates
     seasons["dayzero"] = pd.to_datetime(seasons["dayzero"])
-    games = games.merge(seasons[["season", "dayzero"]], on="season")
+    games = games.merge(seasons[["season", "dayzero"]], on="season", how="left")
     games["date"] = games.apply(
         lambda row: (row["dayzero"] + timedelta(days=row["daynum"])).strftime("%Y-%m-%d"),
         axis=1,
@@ -138,15 +141,18 @@ def load_games():
     ]:
         for prefix in ["w", "l"]:
             rename[f"{prefix}{col}"] = f"{rename_map[prefix]}_{col}"
+    rename = {**rename, "wteamid": "tm_team_id", "lteamid": "opp_team_id"}
     games.rename(columns=rename, inplace=True)
     games["opp_loc"] = np.where(games["tm_loc"] == "N", "N", np.where(games["tm_loc"] == "A", "H", "A"))
 
     # Add game key
     teams = readSql("select * from teams")
     teams_dict = {}
-    for idx, row in teams.iterrows():
-        teams_dict[row["teamid"]] = row["teamname"]
-    games["game_key"] = games.apply(lambda x: f"{teams_dict[x['tm_teamid']]}>{teams_dict[x['opp_teamid']]}", axis=1)
+    for _, row in teams.iterrows():
+        teams_dict[row["team_id"]] = row["team_name"]
+    games["game_key"] = games.apply(
+        lambda x: f"{teams_dict[x['tm_team_id']]}-vs-{teams_dict[x['opp_team_id']]}", axis=1
+    )
 
     # Add additional columns
     for prefix in ["tm", "opp"]:
@@ -190,13 +196,17 @@ def load_games():
     games = pd.concat([games, dup_games], ignore_index=True)
     games = games.sort_values(by=["date", "game_key"]).reset_index(drop=True)
 
+    # Add slug
+    games["slug"] = games.apply(lambda x: f"{x['date']}-{x['game_key']}".lower().replace(" ", "-"), axis=1)
+
     # Reorder columns for easier analysis
     first_cols = [
         "date",
         "season",
         "game_key",
-        "tm_teamid",
-        "opp_teamid",
+        "slug",
+        "tm_team_id",
+        "opp_team_id",
         "tm_loc",
         "opp_loc",
         "tm_pts",
@@ -205,36 +215,46 @@ def load_games():
     remainder_cols = sorted([x for x in games.columns if x not in first_cols])
     games = games[first_cols + remainder_cols]
 
+    # Load data
+    if replace_firestore:
+        reload_firestore("games", games, "slug")
+
     # TODO add postseason
 
     # Drop old, set up new, add indexes, load data
-    executeSql("drop table if exists games")
-    q = f"""
-    create table games (
-        season integer not null,
-        date TEXT not null,
-        game_key TEXT not null,
-        tm_teamid integer not null,
-        opp_teamid integer not null,
-        tm_loc string not null,
-        opp_loc string not null,
-        tm_pts integer not null,
-        opp_pts integer not null,
-        {' real not null, '.join(remainder_cols)} real not null,
-        primary key (season, date asc, game_key asc, tm_teamid asc)
-    )
-    """
-    executeSql(q)
+    if season is None:
+        executeSql("drop table if exists games")
+        q = f"""
+        create table games (
+            season integer not null,
+            date TEXT not null,
+            game_key TEXT not null,
+            slug TEXT not null,
+            tm_team_id integer not null,
+            opp_team_id integer not null,
+            tm_loc string not null,
+            opp_loc string not null,
+            tm_pts integer not null,
+            opp_pts integer not null,
+            {' real not null, '.join(remainder_cols)} real not null,
+            primary key (season, date asc, game_key asc, tm_team_id asc)
+        )
+        """
+        executeSql(q)
+        perms = get_unique_permutations(["date", "season", "game_key", "tm_team_id"])
+        log.info(f"Creating {len(perms)} indexes on games")
+        for p in perms:
+            executeSql(f"CREATE INDEX games_{'_'.join(p)} on games ({', '.join(p)})")
+    else:
+        executeSql(f"delete from games where season = {season}")
 
-    perms = get_unique_permutations(["date", "season", "game_key", "tm_teamid", "opp_teamid"])
-    log.info(f"Creating {len(perms)} indexes on games")
-    for p in perms:
-        executeSql(f"CREATE INDEX games_{'_'.join(p)} on games ({', '.join(p)})")
     dfToTable(
         games,
         table="games",
         db="ncaa.db",
-        ifExists="append",
+        ifExists="append" if season is not None else "replace",
+    )
+
     )
 
 
