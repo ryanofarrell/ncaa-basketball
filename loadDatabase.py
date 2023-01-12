@@ -66,14 +66,31 @@ def reload_firestore(coll: str, df: pd.DataFrame, id_col: str) -> None:
 
 # %% Load teams
 @log.timeFuncInfo
-def load_teams():
+def load_teams(replace_firestore: bool = False):
     "No dependencies"
 
     teams = pd.read_csv("./data/MTeams.csv")
     teams.columns = [x.lower() for x in teams.columns]
+
+    teams["slug"] = teams["teamname"].str.replace(" ", "-").replace("[^a-zA-Z0-9\-]", "", regex=True).str.lower()
+    assert teams["slug"].unique().__len__() == len(teams), "Non-unique slugs!"
+
+    # Split columns into snake_case
+    teams.rename(
+        columns={
+            "teamid": "team_id",
+            "teamname": "team_name",
+            "firstd1season": "first_d1_season",
+            "lastd1season": "last_d1_season",
+        },
+        inplace=True,
+    )
+    if replace_firestore:
+        reload_firestore("teams", teams, "slug")
+
     # Load teams into db
     dfToTable(teams, "teams", "ncaa.db", "replace")
-    for p in get_unique_permutations(["teamid", "teamname"]):
+    for p in get_unique_permutations(["team_id", "team_name"]):
         executeSql(f"CREATE INDEX teams_{'_'.join(p)} ON teams ({', '.join(p)})")
 
 
