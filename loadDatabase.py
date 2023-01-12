@@ -12,6 +12,17 @@ from helpers import (
 import pandas as pd
 from fnmatch import fnmatch
 import numpy as np
+import firebase_admin
+from firebase_admin import credentials, firestore
+import os
+
+os.environ["FIRESTORE_EMULATOR_HOST"] = "127.0.0.1:8080"
+
+cred = credentials.Certificate("teach-tapes-dev-firebase-adminsdk-65ndp-75822e6236.json")
+# cred = credentials.AnonymousCredentials()
+app = firebase_admin.initialize_app(cred)
+db = firestore.client()
+
 
 # %% CONSTANTS
 OTHERPREFIXMAP = {"tm": "opp", "opp": "tm"}
@@ -25,44 +36,32 @@ log = logger(
 )
 
 
-# %% Load calendar
-@log.timeFuncInfo
-def load_calendar():
-    "Relies on games to be loaded into database"
-
-    q = """
-    select
-        season
-        ,min(date) as min
-        ,max(date) as max
-    from games
-    group by season
-    """
-    seasonGameDates = readSql(q)
-    season_list: list[int] = []
-    dates: list[str] = []
-    day_nums: list[int] = []
-    for seas, series in seasonGameDates.iterrows():
-        season_dates = list(pd.date_range(series["min"], series["max"], freq="D").strftime("%Y-%m-%d"))
-        dates += season_dates
-        season_list += [seas] * len(season_dates)
-        day_nums += [x + 1 for x in range(len(season_dates))]
-    cal = pd.DataFrame({"season": season_list, "date": dates, "day_num": day_nums})
-
-    # drop old, make table, add indexe, load data
-    executeSql("drop table if exists calendar")
-    q = f"""
-    create table calendar (
-        season integer not null,
-        date TEXT not null,
-        day_num integer not null,
-        primary key (season asc, date asc)
-    )
-    """
-    executeSql(q)
-    for p in get_unique_permutations(cal.columns):
-        executeSql(f"CREATE INDEX calendar_{'_'.join(p)} ON calendar ({', '.join(p)})")
-    dfToTable(cal, "calendar", "ncaa.db", ifExists="append")
+# %% Reload data to firestore function
+def reload_firestore(coll: str, df: pd.DataFrame, id_col: str) -> None:
+    log.info(f"Beginning delete of {coll}")
+    # Delete all documents in collection with batched deletes
+    docs = db.collection(coll).stream()
+    batch = db.batch()
+    i = 0
+    for doc in docs:
+        batch.delete(doc.reference)
+        i += 1
+        if i % 500 == 0:
+            batch.commit()
+            batch = db.batch()
+            log.info(f"Deleted {i} records")
+    batch.commit()
+    log.info(f"Deleted all in {coll}")
+    batch = db.batch()
+    for i, row in df.iterrows():
+        assert isinstance(i, int), "Row label must be int!"
+        doc_ref = db.collection(coll).document(row[id_col])
+        batch.set(doc_ref, row.to_dict())
+        if i % 500 == 0:
+            batch.commit()
+            batch = db.batch()
+            log.info(f"Committed {i} ({i/len(df):.2%})")
+    batch.commit()
 
 
 # %% Load teams
