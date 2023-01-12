@@ -255,7 +255,45 @@ def load_games(season: int | None = None, replace_firestore: bool = False):
         ifExists="append" if season is not None else "replace",
     )
 
+
+# %% Load calendar
+@log.timeFuncInfo
+def load_calendar():
+    "Relies on games to be loaded into database"
+
+    q = """
+    select
+        season
+        ,min(date) as min
+        ,max(date) as max
+    from games
+    group by season
+    """
+    seasonGameDates = readSql(q)
+    season_list: list[int] = []
+    dates: list[str] = []
+    day_nums: list[int] = []
+    for seas, series in seasonGameDates.iterrows():
+        season_dates = list(pd.date_range(series["min"], series["max"], freq="D").strftime("%Y-%m-%d"))
+        dates += season_dates
+        season_list += [seas] * len(season_dates)
+        day_nums += [x + 1 for x in range(len(season_dates))]
+    cal = pd.DataFrame({"season": season_list, "date": dates, "day_num": day_nums})
+
+    # drop old, make table, add indexe, load data
+    executeSql("drop table if exists calendar")
+    q = f"""
+    create table calendar (
+        season integer not null,
+        date TEXT not null,
+        day_num integer not null,
+        primary key (season asc, date asc)
     )
+    """
+    executeSql(q)
+    for p in get_unique_permutations(cal.columns):
+        executeSql(f"CREATE INDEX calendar_{'_'.join(p)} ON calendar ({', '.join(p)})")
+    dfToTable(cal, "calendar", "ncaa.db", ifExists="append")
 
 
 # %% Scrape single vegas season
